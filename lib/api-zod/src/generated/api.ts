@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,7 +15,6 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Fetches live market data, computes features, runs AI model, returns signal
  * @summary Get current trading signal
  */
 export const getSignalQuerySymbolDefault = `BTC/USDT`;
@@ -36,15 +34,43 @@ export const GetSignalResponse = zod.object({
   timestamp: zod.string(),
   features: zod.object({
     returns: zod.number(),
-    ma: zod.number(),
+    ma20: zod.number(),
+    emaFast: zod.number(),
+    emaSlow: zod.number(),
     volatility: zod.number(),
     rsi: zod.number(),
     macd: zod.number(),
+    macdSignal: zod.number(),
+    macdHist: zod.number(),
+    bbUpper: zod.number(),
+    bbLower: zod.number(),
+    bbPct: zod.number(),
+    atr: zod.number(),
+    stochK: zod.number(),
+    stochD: zod.number(),
+    momentum: zod.number(),
+    zScore: zod.number(),
+    volumeTrend: zod.number(),
+  }),
+  factorScores: zod.object({
+    trend: zod.number(),
+    momentum: zod.number(),
+    meanReversion: zod.number(),
+    volatility: zod.number(),
+    volume: zod.number(),
+    composite: zod.number(),
+  }),
+  backtest: zod.object({
+    winRate: zod.number(),
+    avgReturn: zod.number(),
+    sharpeRatio: zod.number(),
+    maxDrawdown: zod.number(),
+    totalTrades: zod.number(),
+    profitFactor: zod.number(),
   }),
 });
 
 /**
- * Returns recent signal history stored in database
  * @summary Get signal history
  */
 export const getHistoryQueryLimitDefault = 50;
@@ -72,7 +98,6 @@ export const GetHistoryResponseItem = zod.object({
 export const GetHistoryResponse = zod.array(GetHistoryResponseItem);
 
 /**
- * Returns recent candlestick data for charting
  * @summary Get recent OHLCV market data
  */
 export const getMarketDataQuerySymbolDefault = `BTC/USDT`;

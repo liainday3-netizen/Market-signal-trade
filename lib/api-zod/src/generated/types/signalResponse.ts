@@ -5,6 +5,8 @@
  * AI Trader API
  * OpenAPI spec version: 0.1.0
  */
+import type { BacktestStats } from "./backtestStats";
+import type { FactorScores } from "./factorScores";
 import type { Features } from "./features";
 import type { SignalResponseSignal } from "./signalResponseSignal";
 
@@ -16,4 +18,6 @@ export interface SignalResponse {
   timeframe: string;
   timestamp: string;
   features: Features;
+  factorScores: FactorScores;
+  backtest: BacktestStats;
 }

@@ -25,52 +25,75 @@ export function SignalWidget({ data, isLoading }: SignalWidgetProps) {
   }
 
   const { signal, confidence, price, symbol, timeframe } = data;
-  
+
   const getSignalConfig = (s: string) => {
-    switch(s) {
-      case 'BUY': return { color: 'text-buy', bg: 'bg-buy/10', glow: 'text-glow-buy', icon: TrendingUp };
-      case 'SELL': return { color: 'text-sell', bg: 'bg-sell/10', glow: 'text-glow-sell', icon: TrendingDown };
-      default: return { color: 'text-hold', bg: 'bg-hold/10', glow: 'text-glow-hold', icon: Minus };
+    switch (s) {
+      case "BUY": return { color: "text-buy", bg: "bg-buy/10", border: "border-buy/20", icon: TrendingUp, label: "Long" };
+      case "SELL": return { color: "text-sell", bg: "bg-sell/10", border: "border-sell/20", icon: TrendingDown, label: "Short" };
+      default: return { color: "text-hold", bg: "bg-hold/10", border: "border-hold/20", icon: Minus, label: "Neutral" };
     }
-  }
+  };
 
   const config = getSignalConfig(signal);
   const Icon = config.icon;
+  const confidencePct = Math.round(confidence * 100);
+  const composite = data.factorScores?.composite ?? 0;
+  const compositeBar = ((composite + 1) / 2) * 100;
 
   return (
-    <Card className="relative overflow-hidden h-full flex flex-col">
-      <div className={cn("absolute inset-0 opacity-20 pointer-events-none transition-colors duration-1000", config.bg)} />
-      
-      <CardHeader className="pb-2">
+    <Card className={cn("relative overflow-hidden h-full flex flex-col border", config.border)}>
+      <div className={cn("absolute inset-0 opacity-10 pointer-events-none", config.bg)} />
+
+      <CardHeader className="pb-2 relative z-10">
         <div className="flex justify-between items-start">
-          <CardTitle>AI Prediction • {symbol}</CardTitle>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2 py-1 rounded-md border border-border">
+          <CardTitle className="text-sm uppercase tracking-widest font-mono text-muted-foreground">AI Signal · {symbol}</CardTitle>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2 py-1 rounded border border-border">
             <Activity className="w-3 h-3 text-primary animate-pulse" />
-            Live • {timeframe}
+            {timeframe}
           </div>
         </div>
       </CardHeader>
-      
-      <CardContent className="flex-1 flex flex-col justify-center relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className={cn("p-3 rounded-xl bg-background border border-border shadow-inner", config.color)}>
-              <Icon className="w-8 h-8" />
-            </div>
-            <div>
-              <h2 className={cn("text-5xl font-bold tracking-tight font-mono uppercase transition-all", config.color, config.glow)}>
-                {signal}
-              </h2>
-              <p className="text-muted-foreground text-sm font-medium mt-1">
-                Confidence: <span className="text-foreground">{Math.round(confidence * 100)}%</span>
-              </p>
-            </div>
+
+      <CardContent className="flex-1 flex flex-col relative z-10 gap-4">
+        {/* Main signal */}
+        <div className="flex items-center gap-3">
+          <div className={cn("p-3 rounded-xl bg-background/50 border border-border/50 shadow-inner", config.color)}>
+            <Icon className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className={cn("text-4xl font-bold tracking-tight font-mono uppercase", config.color)}>
+              {signal}
+            </h2>
+            <p className="text-muted-foreground text-xs font-mono mt-0.5">
+              {config.label} · <span className="text-foreground">{confidencePct}% conf.</span>
+            </p>
           </div>
         </div>
-        
-        <div className="mt-auto pt-4 border-t border-border/50">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Price</p>
-          <p className="text-3xl font-mono text-foreground font-semibold tracking-tight">
+
+        {/* Composite score bar */}
+        <div>
+          <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 mb-1">
+            <span>BEARISH</span>
+            <span>SCORE: {composite > 0 ? "+" : ""}{composite.toFixed(3)}</span>
+            <span>BULLISH</span>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden relative">
+            <div className="absolute inset-y-0 left-1/2 w-px bg-border z-10" />
+            <div
+              className={cn("absolute inset-y-0 transition-all duration-700", config.bg === "bg-buy/10" ? "bg-buy" : config.bg === "bg-sell/10" ? "bg-sell" : "bg-hold")}
+              style={{
+                left: composite >= 0 ? "50%" : `${compositeBar}%`,
+                width: `${Math.abs(composite) / 2 * 100}%`,
+                opacity: 0.8,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Price */}
+        <div className="mt-auto pt-3 border-t border-border/40">
+          <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Live Price</p>
+          <p className="text-2xl font-mono text-foreground font-bold tracking-tight">
             {formatCurrency(price)}
           </p>
         </div>

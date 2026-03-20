@@ -17,7 +17,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -30,7 +29,6 @@ paths:
       operationId: getSignal
       tags: [trader]
       summary: Get current trading signal
-      description: Fetches live market data, computes features, runs AI model, returns signal
       parameters:
         - name: symbol
           in: query
@@ -46,13 +44,13 @@ paths:
             default: "1m"
       responses:
         "200":
-          description: Trading signal
+          description: Trading signal with backtest stats
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SignalResponse"
         "500":
-          description: Error fetching signal
+          description: Error
           content:
             application/json:
               schema:
@@ -62,7 +60,6 @@ paths:
       operationId: getHistory
       tags: [trader]
       summary: Get signal history
-      description: Returns recent signal history stored in database
       parameters:
         - name: limit
           in: query
@@ -90,7 +87,6 @@ paths:
       operationId: getMarketData
       tags: [trader]
       summary: Get recent OHLCV market data
-      description: Returns recent candlestick data for charting
       parameters:
         - name: symbol
           in: query
@@ -146,6 +142,10 @@ components:
           type: string
         features:
           $ref: "#/components/schemas/Features"
+        factorScores:
+          $ref: "#/components/schemas/FactorScores"
+        backtest:
+          $ref: "#/components/schemas/BacktestStats"
       required:
         - signal
         - confidence
@@ -154,12 +154,18 @@ components:
         - timeframe
         - timestamp
         - features
+        - factorScores
+        - backtest
     Features:
       type: object
       properties:
         returns:
           type: number
-        ma:
+        ma20:
+          type: number
+        emaFast:
+          type: number
+        emaSlow:
           type: number
         volatility:
           type: number
@@ -167,12 +173,91 @@ components:
           type: number
         macd:
           type: number
+        macdSignal:
+          type: number
+        macdHist:
+          type: number
+        bbUpper:
+          type: number
+        bbLower:
+          type: number
+        bbPct:
+          type: number
+        atr:
+          type: number
+        stochK:
+          type: number
+        stochD:
+          type: number
+        momentum:
+          type: number
+        zScore:
+          type: number
+        volumeTrend:
+          type: number
       required:
         - returns
-        - ma
+        - ma20
+        - emaFast
+        - emaSlow
         - volatility
         - rsi
         - macd
+        - macdSignal
+        - macdHist
+        - bbUpper
+        - bbLower
+        - bbPct
+        - atr
+        - stochK
+        - stochD
+        - momentum
+        - zScore
+        - volumeTrend
+    FactorScores:
+      type: object
+      properties:
+        trend:
+          type: number
+        momentum:
+          type: number
+        meanReversion:
+          type: number
+        volatility:
+          type: number
+        volume:
+          type: number
+        composite:
+          type: number
+      required:
+        - trend
+        - momentum
+        - meanReversion
+        - volatility
+        - volume
+        - composite
+    BacktestStats:
+      type: object
+      properties:
+        winRate:
+          type: number
+        avgReturn:
+          type: number
+        sharpeRatio:
+          type: number
+        maxDrawdown:
+          type: number
+        totalTrades:
+          type: number
+        profitFactor:
+          type: number
+      required:
+        - winRate
+        - avgReturn
+        - sharpeRatio
+        - maxDrawdown
+        - totalTrades
+        - profitFactor
     SignalRecord:
       type: object
       properties:

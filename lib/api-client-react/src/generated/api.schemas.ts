@@ -20,10 +20,41 @@ export const SignalResponseSignal = {
 
 export interface Features {
   returns: number;
-  ma: number;
+  ma20: number;
+  emaFast: number;
+  emaSlow: number;
   volatility: number;
   rsi: number;
   macd: number;
+  macdSignal: number;
+  macdHist: number;
+  bbUpper: number;
+  bbLower: number;
+  bbPct: number;
+  atr: number;
+  stochK: number;
+  stochD: number;
+  momentum: number;
+  zScore: number;
+  volumeTrend: number;
+}
+
+export interface FactorScores {
+  trend: number;
+  momentum: number;
+  meanReversion: number;
+  volatility: number;
+  volume: number;
+  composite: number;
+}
+
+export interface BacktestStats {
+  winRate: number;
+  avgReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  totalTrades: number;
+  profitFactor: number;
 }
 
 export interface SignalResponse {
@@ -34,6 +65,8 @@ export interface SignalResponse {
   timeframe: string;
   timestamp: string;
   features: Features;
+  factorScores: FactorScores;
+  backtest: BacktestStats;
 }
 
 export interface SignalRecord {

@@ -8,8 +8,21 @@
 
 export interface Features {
   returns: number;
-  ma: number;
+  ma20: number;
+  emaFast: number;
+  emaSlow: number;
   volatility: number;
   rsi: number;
   macd: number;
+  macdSignal: number;
+  macdHist: number;
+  bbUpper: number;
+  bbLower: number;
+  bbPct: number;
+  atr: number;
+  stochK: number;
+  stochD: number;
+  momentum: number;
+  zScore: number;
+  volumeTrend: number;
 }
