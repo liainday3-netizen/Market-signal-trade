@@ -1,0 +1,11 @@
+packages:
+  "recharts": "For rendering the live price chart"
+  "date-fns": "For formatting timestamps in the chart and history table"
+  "clsx": "For conditional tailwind class merging"
+  "tailwind-merge": "For conditional tailwind class merging safely"
+  "@radix-ui/react-slot": "For reusable component composition"
+
+notes:
+  - Using generated API client from @workspace/api-client-react as instructed
+  - Using lucide-react for icons (already in base stack)
+  - Designed as a dark-mode professional trading terminal

@@ -1,0 +1,142 @@
+Market Data → Features → AI Model → Signal → Trade → Repeat
+🏗️ STEP 1 — PROJECT STRUCTURE
+
+Create this:
+
+ai-trader/
+│
+├── main.py
+├── config.py
+├── data.py
+├── features.py
+├── model.py
+├── strategy.py
+├── execution.py
+└── requirements.txt
+⚙️ STEP 2 — INSTALL DEPENDENCIES
+
+requirements.txt
+
+ccxt
+pandas
+numpy
+torch
+websockets
+asyncio
+🔑 STEP 3 — CONFIG (API KEYS)
+
+config.py
+
+API_KEY = "YOUR_API_KEY"
+API_SECRET = "YOUR_SECRET"
+SYMBOL = "BTC/USDT"
+TIMEFRAME = "1m"
+RISK_PER_TRADE = 0.01
+📡 STEP 4 — DATA (LIVE MARKET FEED)
+
+data.py
+
+import ccxt
+
+exchange = ccxt.binance({
+    "apiKey": "",
+    "secret": "",
+    "enableRateLimit": True
+})
+
+def get_data(symbol, timeframe):
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+    return ohlcv
+🧮 STEP 5 — FEATURE ENGINEERING
+
+features.py
+
+import pandas as pd
+
+def create_features(data):
+    df = pd.DataFrame(data, columns=["time","open","high","low","close","volume"])
+    
+    df["returns"] = df["close"].pct_change()
+    df["ma"] = df["close"].rolling(10).mean()
+    df["volatility"] = df["returns"].rolling(10).std()
+    
+    df = df.dropna()
+    return df
+🤖 STEP 6 — AI MODEL (SIMPLE START)
+
+model.py
+
+import torch
+import torch.nn as nn
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(3, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
+model = Model()
+📊 STEP 7 — STRATEGY
+
+strategy.py
+
+import torch
+
+def generate_signal(model, df):
+    latest = df.iloc[-1][["returns","ma","volatility"]].values
+    x = torch.tensor(latest, dtype=torch.float32)
+    
+    pred = model(x)
+    
+    if pred > 0.6:
+        return "BUY"
+    elif pred < 0.4:
+        return "SELL"
+    else:
+        return "HOLD"
+💸 STEP 8 — EXECUTION ENGINE
+
+execution.py
+
+import ccxt
+
+exchange = ccxt.binance()
+
+def execute_trade(signal, symbol):
+    if signal == "BUY":
+        print("Buying...")
+        # exchange.create_market_buy_order(symbol, 0.001)
+        
+    elif signal == "SELL":
+        print("Selling...")
+        # exchange.create_market_sell_order(symbol, 0.001)
+🚀 STEP 9 — MAIN LOOP
+
+main.py
+
+from data import get_data
+from features import create_features
+from model import model
+from strategy import generate_signal
+from execution import execute_trade
+from config import SYMBOL, TIMEFRAME
+
+while True:
+    data = get_data(SYMBOL, TIMEFRAME)
+    df = create_features(data)
+    
+    signal = generate_signal(model, df)
+    
+    print("Signal:", signal)
+    
+    execute_trade(signal, SYMBOL)
+▶️ STEP 10 — RUN IT
+pip install -r requirements.txt
+python main.py

@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Trader API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: trader
+    description: AI Trader operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /trader/signal:
+    get:
+      operationId: getSignal
+      tags: [trader]
+      summary: Get current trading signal
+      description: Fetches live market data, computes features, runs AI model, returns signal
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "BTC/USDT"
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "1m"
+      responses:
+        "200":
+          description: Trading signal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalResponse"
+        "500":
+          description: Error fetching signal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /trader/history:
+    get:
+      operationId: getHistory
+      tags: [trader]
+      summary: Get signal history
+      description: Returns recent signal history stored in database
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 50
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "BTC/USDT"
+      responses:
+        "200":
+          description: Signal history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SignalRecord"
+  /trader/market:
+    get:
+      operationId: getMarketData
+      tags: [trader]
+      summary: Get recent OHLCV market data
+      description: Returns recent candlestick data for charting
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "BTC/USDT"
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "1m"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 50
+      responses:
+        "200":
+          description: Market data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Candle"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +128,117 @@ components:
           type: string
       required:
         - status
-
+    SignalResponse:
+      type: object
+      properties:
+        signal:
+          type: string
+          enum: [BUY, SELL, HOLD]
+        confidence:
+          type: number
+        price:
+          type: number
+        symbol:
+          type: string
+        timeframe:
+          type: string
+        timestamp:
+          type: string
+        features:
+          $ref: "#/components/schemas/Features"
+      required:
+        - signal
+        - confidence
+        - price
+        - symbol
+        - timeframe
+        - timestamp
+        - features
+    Features:
+      type: object
+      properties:
+        returns:
+          type: number
+        ma:
+          type: number
+        volatility:
+          type: number
+        rsi:
+          type: number
+        macd:
+          type: number
+      required:
+        - returns
+        - ma
+        - volatility
+        - rsi
+        - macd
+    SignalRecord:
+      type: object
+      properties:
+        id:
+          type: number
+        signal:
+          type: string
+        confidence:
+          type: number
+        price:
+          type: number
+        symbol:
+          type: string
+        timeframe:
+          type: string
+        returns:
+          type: number
+        ma:
+          type: number
+        volatility:
+          type: number
+        rsi:
+          type: number
+        macd:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - signal
+        - confidence
+        - price
+        - symbol
+        - timeframe
+        - returns
+        - ma
+        - volatility
+        - rsi
+        - macd
+        - createdAt
+    Candle:
+      type: object
+      properties:
+        time:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+      required:
+        - time
+        - open
+        - high
+        - low
+        - close
+        - volume
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

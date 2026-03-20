@@ -16,6 +16,19 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Features
+
+### AI Trader (artifacts/ai-trader)
+- Dark-mode professional trading terminal dashboard
+- Live BTC/USDT price data via Binance US public API (no API key needed)
+- Neural network AI model for BUY/SELL/HOLD signal generation
+- Feature engineering: Returns, Moving Average, Volatility, RSI(14), MACD
+- Live price action chart (Recharts)
+- Signal history stored in PostgreSQL
+- Auto-refresh every 30 seconds
+- Symbol selector (BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT)
+- Timeframe selector (1m, 5m, 15m)
+
 ## Structure
 
 ```text
