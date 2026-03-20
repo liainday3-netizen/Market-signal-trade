@@ -15,7 +15,7 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * @summary Get current trading signal
+ * @summary Get current trading signal on demand
  */
 export const getSignalQuerySymbolDefault = `BTC/USDT`;
 export const getSignalQueryTimeframeDefault = `1m`;
@@ -71,14 +71,13 @@ export const GetSignalResponse = zod.object({
 });
 
 /**
- * @summary Get signal history
+ * @summary Get signal history from DB
  */
 export const getHistoryQueryLimitDefault = 50;
-export const getHistoryQuerySymbolDefault = `BTC/USDT`;
 
 export const GetHistoryQueryParams = zod.object({
   limit: zod.coerce.number().default(getHistoryQueryLimitDefault),
-  symbol: zod.coerce.string().default(getHistoryQuerySymbolDefault),
+  symbol: zod.coerce.string().optional(),
 });
 
 export const GetHistoryResponseItem = zod.object({
@@ -98,7 +97,7 @@ export const GetHistoryResponseItem = zod.object({
 export const GetHistoryResponse = zod.array(GetHistoryResponseItem);
 
 /**
- * @summary Get recent OHLCV market data
+ * @summary Get OHLCV market data
  */
 export const getMarketDataQuerySymbolDefault = `BTC/USDT`;
 export const getMarketDataQueryTimeframeDefault = `1m`;
@@ -119,3 +118,54 @@ export const GetMarketDataResponseItem = zod.object({
   volume: zod.number(),
 });
 export const GetMarketDataResponse = zod.array(GetMarketDataResponseItem);
+
+/**
+ * @summary Get auto-trader loop status
+ */
+export const GetAutoTraderStatusResponse = zod.object({
+  isRunning: zod.boolean(),
+  intervalSeconds: zod.number(),
+  totalRuns: zod.number(),
+  signalsGenerated: zod.number(),
+  lastRun: zod.string().nullish(),
+  nextRun: zod.string().nullish(),
+  activeSymbols: zod.array(zod.string()),
+  lastSignals: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      signal: zod.string(),
+      confidence: zod.number(),
+      price: zod.number(),
+      composite: zod.number(),
+      timestamp: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Start or stop the auto-trader loop
+ */
+export const ControlAutoTraderBody = zod.object({
+  action: zod.enum(["start", "stop"]),
+  intervalSeconds: zod.number().optional(),
+});
+
+export const ControlAutoTraderResponse = zod.object({
+  isRunning: zod.boolean(),
+  intervalSeconds: zod.number(),
+  totalRuns: zod.number(),
+  signalsGenerated: zod.number(),
+  lastRun: zod.string().nullish(),
+  nextRun: zod.string().nullish(),
+  activeSymbols: zod.array(zod.string()),
+  lastSignals: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      signal: zod.string(),
+      confidence: zod.number(),
+      price: zod.number(),
+      composite: zod.number(),
+      timestamp: zod.string(),
+    }),
+  ),
+});

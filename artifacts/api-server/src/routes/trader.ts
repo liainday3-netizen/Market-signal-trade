@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import * as autoTrader from "../lib/autoTrader";
 
 const router: IRouter = Router();
 
@@ -425,14 +426,17 @@ router.get("/signal", async (req, res) => {
 router.get("/history", async (req, res) => {
   try {
     const limit = Math.min(parseInt((req.query["limit"] as string) ?? "50", 10), 200);
-    const symbol = (req.query["symbol"] as string) ?? "BTC/USDT";
+    const symbol = (req.query["symbol"] as string) || undefined;
 
-    const records = await db
+    const query = db
       .select()
       .from(signalsTable)
-      .where(eq(signalsTable.symbol, symbol))
       .orderBy(desc(signalsTable.createdAt))
       .limit(limit);
+
+    const records = symbol
+      ? await db.select().from(signalsTable).where(eq(signalsTable.symbol, symbol)).orderBy(desc(signalsTable.createdAt)).limit(limit)
+      : await query;
 
     res.json(records);
   } catch (err) {
@@ -455,4 +459,19 @@ router.get("/market", async (req, res) => {
   }
 });
 
+router.get("/status", (_req, res) => {
+  res.json(autoTrader.getState());
+});
+
+router.post("/status", (req, res) => {
+  const { action, intervalSeconds } = req.body as { action?: string; intervalSeconds?: number };
+  if (action === "start") {
+    autoTrader.start(intervalSeconds);
+  } else if (action === "stop") {
+    autoTrader.stop();
+  }
+  res.json(autoTrader.getState());
+});
+
 export default router;
+

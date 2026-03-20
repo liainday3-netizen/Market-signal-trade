@@ -9,6 +9,39 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface RecentSignal {
+  symbol: string;
+  signal: string;
+  confidence: number;
+  price: number;
+  composite: number;
+  timestamp: string;
+}
+
+export interface AutoTraderStatus {
+  isRunning: boolean;
+  intervalSeconds: number;
+  totalRuns: number;
+  signalsGenerated: number;
+  lastRun?: string | null;
+  nextRun?: string | null;
+  activeSymbols: string[];
+  lastSignals: RecentSignal[];
+}
+
+export type AutoTraderControlAction =
+  (typeof AutoTraderControlAction)[keyof typeof AutoTraderControlAction];
+
+export const AutoTraderControlAction = {
+  start: "start",
+  stop: "stop",
+} as const;
+
+export interface AutoTraderControl {
+  action: AutoTraderControlAction;
+  intervalSeconds?: number;
+}
+
 export type SignalResponseSignal =
   (typeof SignalResponseSignal)[keyof typeof SignalResponseSignal];
 

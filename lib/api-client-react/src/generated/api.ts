@@ -5,15 +5,20 @@
  * AI Trader API
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
 import type {
+  AutoTraderControl,
+  AutoTraderStatus,
   Candle,
   ErrorResponse,
   GetHistoryParams,
@@ -25,7 +30,7 @@ import type {
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -109,7 +114,7 @@ export function useHealthCheck<
 }
 
 /**
- * @summary Get current trading signal
+ * @summary Get current trading signal on demand
  */
 export const getGetSignalUrl = (params?: GetSignalParams) => {
   const normalizedParams = new URLSearchParams();
@@ -176,7 +181,7 @@ export type GetSignalQueryResult = NonNullable<
 export type GetSignalQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get current trading signal
+ * @summary Get current trading signal on demand
  */
 
 export function useGetSignal<
@@ -203,7 +208,7 @@ export function useGetSignal<
 }
 
 /**
- * @summary Get signal history
+ * @summary Get signal history from DB
  */
 export const getGetHistoryUrl = (params?: GetHistoryParams) => {
   const normalizedParams = new URLSearchParams();
@@ -270,7 +275,7 @@ export type GetHistoryQueryResult = NonNullable<
 export type GetHistoryQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get signal history
+ * @summary Get signal history from DB
  */
 
 export function useGetHistory<
@@ -297,7 +302,7 @@ export function useGetHistory<
 }
 
 /**
- * @summary Get recent OHLCV market data
+ * @summary Get OHLCV market data
  */
 export const getGetMarketDataUrl = (params?: GetMarketDataParams) => {
   const normalizedParams = new URLSearchParams();
@@ -364,7 +369,7 @@ export type GetMarketDataQueryResult = NonNullable<
 export type GetMarketDataQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get recent OHLCV market data
+ * @summary Get OHLCV market data
  */
 
 export function useGetMarketData<
@@ -389,3 +394,164 @@ export function useGetMarketData<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get auto-trader loop status
+ */
+export const getGetAutoTraderStatusUrl = () => {
+  return `/api/trader/status`;
+};
+
+export const getAutoTraderStatus = async (
+  options?: RequestInit,
+): Promise<AutoTraderStatus> => {
+  return customFetch<AutoTraderStatus>(getGetAutoTraderStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAutoTraderStatusQueryKey = () => {
+  return [`/api/trader/status`] as const;
+};
+
+export const getGetAutoTraderStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutoTraderStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAutoTraderStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAutoTraderStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAutoTraderStatus>>
+  > = ({ signal }) => getAutoTraderStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutoTraderStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAutoTraderStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutoTraderStatus>>
+>;
+export type GetAutoTraderStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get auto-trader loop status
+ */
+
+export function useGetAutoTraderStatus<
+  TData = Awaited<ReturnType<typeof getAutoTraderStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAutoTraderStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutoTraderStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Start or stop the auto-trader loop
+ */
+export const getControlAutoTraderUrl = () => {
+  return `/api/trader/status`;
+};
+
+export const controlAutoTrader = async (
+  autoTraderControl: AutoTraderControl,
+  options?: RequestInit,
+): Promise<AutoTraderStatus> => {
+  return customFetch<AutoTraderStatus>(getControlAutoTraderUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(autoTraderControl),
+  });
+};
+
+export const getControlAutoTraderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof controlAutoTrader>>,
+    TError,
+    { data: BodyType<AutoTraderControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof controlAutoTrader>>,
+  TError,
+  { data: BodyType<AutoTraderControl> },
+  TContext
+> => {
+  const mutationKey = ["controlAutoTrader"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof controlAutoTrader>>,
+    { data: BodyType<AutoTraderControl> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return controlAutoTrader(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ControlAutoTraderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof controlAutoTrader>>
+>;
+export type ControlAutoTraderMutationBody = BodyType<AutoTraderControl>;
+export type ControlAutoTraderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Start or stop the auto-trader loop
+ */
+export const useControlAutoTrader = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof controlAutoTrader>>,
+    TError,
+    { data: BodyType<AutoTraderControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof controlAutoTrader>>,
+  TError,
+  { data: BodyType<AutoTraderControl> },
+  TContext
+> => {
+  return useMutation(getControlAutoTraderMutationOptions(options));
+};

@@ -28,7 +28,7 @@ paths:
     get:
       operationId: getSignal
       tags: [trader]
-      summary: Get current trading signal
+      summary: Get current trading signal on demand
       parameters:
         - name: symbol
           in: query
@@ -59,7 +59,7 @@ paths:
     get:
       operationId: getHistory
       tags: [trader]
-      summary: Get signal history
+      summary: Get signal history from DB
       parameters:
         - name: limit
           in: query
@@ -72,7 +72,6 @@ paths:
           required: false
           schema:
             type: string
-            default: "BTC/USDT"
       responses:
         "200":
           description: Signal history
@@ -86,7 +85,7 @@ paths:
     get:
       operationId: getMarketData
       tags: [trader]
-      summary: Get recent OHLCV market data
+      summary: Get OHLCV market data
       parameters:
         - name: symbol
           in: query
@@ -115,6 +114,35 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Candle"
+  /trader/status:
+    get:
+      operationId: getAutoTraderStatus
+      tags: [trader]
+      summary: Get auto-trader loop status
+      responses:
+        "200":
+          description: Auto-trader loop state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoTraderStatus"
+    post:
+      operationId: controlAutoTrader
+      tags: [trader]
+      summary: Start or stop the auto-trader loop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoTraderControl"
+      responses:
+        "200":
+          description: Updated auto-trader state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoTraderStatus"
 components:
   schemas:
     HealthStatus:
@@ -124,6 +152,70 @@ components:
           type: string
       required:
         - status
+    AutoTraderStatus:
+      type: object
+      properties:
+        isRunning:
+          type: boolean
+        intervalSeconds:
+          type: number
+        totalRuns:
+          type: number
+        signalsGenerated:
+          type: number
+        lastRun:
+          type: string
+          nullable: true
+        nextRun:
+          type: string
+          nullable: true
+        activeSymbols:
+          type: array
+          items:
+            type: string
+        lastSignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentSignal"
+      required:
+        - isRunning
+        - intervalSeconds
+        - totalRuns
+        - signalsGenerated
+        - activeSymbols
+        - lastSignals
+    AutoTraderControl:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [start, stop]
+        intervalSeconds:
+          type: number
+      required:
+        - action
+    RecentSignal:
+      type: object
+      properties:
+        symbol:
+          type: string
+        signal:
+          type: string
+        confidence:
+          type: number
+        price:
+          type: number
+        composite:
+          type: number
+        timestamp:
+          type: string
+      required:
+        - symbol
+        - signal
+        - confidence
+        - price
+        - composite
+        - timestamp
     SignalResponse:
       type: object
       properties:

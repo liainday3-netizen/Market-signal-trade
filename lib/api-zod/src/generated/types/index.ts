@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./autoTraderControl";
+export * from "./autoTraderControlAction";
+export * from "./autoTraderStatus";
 export * from "./backtestStats";
 export * from "./candle";
 export * from "./errorResponse";
@@ -15,6 +18,7 @@ export * from "./getHistoryParams";
 export * from "./getMarketDataParams";
 export * from "./getSignalParams";
 export * from "./healthStatus";
+export * from "./recentSignal";
 export * from "./signalRecord";
 export * from "./signalResponse";
 export * from "./signalResponseSignal";
