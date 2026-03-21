@@ -1,4 +1,4 @@
-import { SignalResponse } from "@workspace/api-client-react/src/generated/api.schemas";
+import { SignalResponse } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus, Activity } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";

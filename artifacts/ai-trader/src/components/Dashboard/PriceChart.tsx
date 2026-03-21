@@ -1,4 +1,4 @@
-import { Candle } from "@workspace/api-client-react/src/generated/api.schemas";
+import { Candle } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { format } from "date-fns";

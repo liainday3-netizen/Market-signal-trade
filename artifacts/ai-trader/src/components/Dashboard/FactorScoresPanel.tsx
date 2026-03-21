@@ -1,4 +1,4 @@
-import { FactorScores } from "@workspace/api-client-react/src/generated/api.schemas";
+import { FactorScores } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 

@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
-import { useGetAutoTraderStatus, useControlAutoTrader } from "@workspace/api-client-react";
-import { AutoTraderStatus, RecentSignal } from "@workspace/api-client-react/src/generated/api.schemas";
+import {
+  useGetAutoTraderStatus,
+  useControlAutoTrader,
+  getGetAutoTraderStatusQueryKey,
+} from "@workspace/api-client-react";
+import type { RecentSignal } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +69,7 @@ function SignalFeedRow({ sig }: { sig: RecentSignal }) {
 
 export function AutoTraderPanel() {
   const { data: status, isLoading } = useGetAutoTraderStatus({
-    query: { refetchInterval: 2000 },
+    query: { queryKey: getGetAutoTraderStatusQueryKey(), refetchInterval: 2000 },
   });
 
   const { mutate: control, isPending } = useControlAutoTrader();

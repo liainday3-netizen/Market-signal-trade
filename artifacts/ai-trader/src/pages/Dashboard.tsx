@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { useGetSignal, useGetHistory, useGetMarketData } from "@workspace/api-client-react";
+import {
+  useGetSignal,
+  useGetHistory,
+  useGetMarketData,
+  getGetSignalQueryKey,
+  getGetHistoryQueryKey,
+  getGetMarketDataQueryKey,
+} from "@workspace/api-client-react";
 import { SignalWidget } from "@/components/Dashboard/SignalWidget";
 import { MetricsPanel } from "@/components/Dashboard/MetricsPanel";
 import { FactorScoresPanel } from "@/components/Dashboard/FactorScoresPanel";
@@ -19,24 +26,36 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState("1m");
   const { toast } = useToast();
 
+  const historyParams = { limit: 50 };
+  const marketParams = { symbol, timeframe, limit: 100 };
+
   const {
     data: signalData,
     isLoading: isLoadingSignal,
     refetch: refetchSignal,
     isRefetching: isRefetchingSignal,
-  } = useGetSignal({ symbol, timeframe }, { query: { refetchInterval: false } });
+  } = useGetSignal(
+    { symbol, timeframe },
+    { query: { queryKey: getGetSignalQueryKey({ symbol, timeframe }), refetchInterval: false } },
+  );
 
   const {
     data: historyData,
     isLoading: isLoadingHistory,
     refetch: refetchHistory,
-  } = useGetHistory({ limit: 50 }, { query: { refetchInterval: 5000 } });
+  } = useGetHistory(
+    historyParams,
+    { query: { queryKey: getGetHistoryQueryKey(historyParams), refetchInterval: 5000 } },
+  );
 
   const {
     data: marketData,
     isLoading: isLoadingMarket,
     refetch: refetchMarket,
-  } = useGetMarketData({ symbol, timeframe, limit: 100 }, { query: { refetchInterval: 30000 } });
+  } = useGetMarketData(
+    marketParams,
+    { query: { queryKey: getGetMarketDataQueryKey(marketParams), refetchInterval: 30000 } },
+  );
 
   const handleManualRefresh = () => {
     refetchSignal();
