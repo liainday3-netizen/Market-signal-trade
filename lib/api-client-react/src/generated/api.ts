@@ -25,6 +25,7 @@ import type {
   GetMarketDataParams,
   GetSignalParams,
   HealthStatus,
+  PortfolioSnapshot,
   SignalRecord,
   SignalResponse,
 } from "./api.schemas";
@@ -394,6 +395,162 @@ export function useGetMarketData<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get paper trading portfolio snapshot
+ */
+export const getGetPortfolioUrl = () => {
+  return `/api/trader/portfolio`;
+};
+
+export const getPortfolio = async (
+  options?: RequestInit,
+): Promise<PortfolioSnapshot> => {
+  return customFetch<PortfolioSnapshot>(getGetPortfolioUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPortfolioQueryKey = () => {
+  return [`/api/trader/portfolio`] as const;
+};
+
+export const getGetPortfolioQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortfolio>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPortfolioQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolio>>> = ({
+    signal,
+  }) => getPortfolio({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortfolio>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortfolioQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortfolio>>
+>;
+export type GetPortfolioQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get paper trading portfolio snapshot
+ */
+
+export function useGetPortfolio<
+  TData = Awaited<ReturnType<typeof getPortfolio>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortfolioQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Reset paper portfolio to starting capital
+ */
+export const getResetPortfolioUrl = () => {
+  return `/api/trader/portfolio/reset`;
+};
+
+export const resetPortfolio = async (
+  options?: RequestInit,
+): Promise<PortfolioSnapshot> => {
+  return customFetch<PortfolioSnapshot>(getResetPortfolioUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResetPortfolioMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPortfolio>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetPortfolio>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["resetPortfolio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetPortfolio>>,
+    void
+  > = () => {
+    return resetPortfolio(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetPortfolioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetPortfolio>>
+>;
+
+export type ResetPortfolioMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reset paper portfolio to starting capital
+ */
+export const useResetPortfolio = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPortfolio>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetPortfolio>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getResetPortfolioMutationOptions(options));
+};
 
 /**
  * @summary Get auto-trader loop status

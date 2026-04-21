@@ -120,6 +120,88 @@ export const GetMarketDataResponseItem = zod.object({
 export const GetMarketDataResponse = zod.array(GetMarketDataResponseItem);
 
 /**
+ * @summary Get paper trading portfolio snapshot
+ */
+export const GetPortfolioResponse = zod.object({
+  startingCapital: zod.number(),
+  cash: zod.number(),
+  equity: zod.number(),
+  pnl: zod.number(),
+  pnlPercent: zod.number(),
+  positions: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      currentPrice: zod.number(),
+      marketValue: zod.number(),
+      unrealizedPnl: zod.number(),
+      unrealizedPnlPercent: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+  trades: zod.array(
+    zod.object({
+      id: zod.number(),
+      symbol: zod.string(),
+      side: zod.string(),
+      quantity: zod.number(),
+      price: zod.number(),
+      value: zod.number(),
+      realizedPnl: zod.number().nullish(),
+      timestamp: zod.string(),
+    }),
+  ),
+  totalTrades: zod.number(),
+  closedTrades: zod.number(),
+  wins: zod.number(),
+  losses: zod.number(),
+  winRate: zod.number(),
+  totalRealizedPnl: zod.number(),
+});
+
+/**
+ * @summary Reset paper portfolio to starting capital
+ */
+export const ResetPortfolioResponse = zod.object({
+  startingCapital: zod.number(),
+  cash: zod.number(),
+  equity: zod.number(),
+  pnl: zod.number(),
+  pnlPercent: zod.number(),
+  positions: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      currentPrice: zod.number(),
+      marketValue: zod.number(),
+      unrealizedPnl: zod.number(),
+      unrealizedPnlPercent: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+  trades: zod.array(
+    zod.object({
+      id: zod.number(),
+      symbol: zod.string(),
+      side: zod.string(),
+      quantity: zod.number(),
+      price: zod.number(),
+      value: zod.number(),
+      realizedPnl: zod.number().nullish(),
+      timestamp: zod.string(),
+    }),
+  ),
+  totalTrades: zod.number(),
+  closedTrades: zod.number(),
+  wins: zod.number(),
+  losses: zod.number(),
+  winRate: zod.number(),
+  totalRealizedPnl: zod.number(),
+});
+
+/**
  * @summary Get auto-trader loop status
  */
 export const GetAutoTraderStatusResponse = zod.object({

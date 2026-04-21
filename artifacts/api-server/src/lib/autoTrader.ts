@@ -1,5 +1,6 @@
 import { db, signalsTable } from "@workspace/db";
 import { logger } from "./logger";
+import { setLastPrice, executeBuy, executeSell, ensurePortfolio } from "./paperTrader";
 
 // ─── Re-export trading engine (same logic as routes/trader.ts) ───────────────
 
@@ -194,7 +195,7 @@ async function runCycle() {
       const factors = computeFactorScores(features);
       const { signal, confidence } = signalFromFactors(factors);
 
-      await db.insert(signalsTable).values({
+      const [insertedSignal] = await db.insert(signalsTable).values({
         signal, confidence, price, symbol,
         timeframe: DEFAULT_TIMEFRAME,
         returns: features.returns,
@@ -202,7 +203,16 @@ async function runCycle() {
         volatility: features.volatility,
         rsi: features.rsi,
         macd: features.macd,
-      });
+      }).returning({ id: signalsTable.id });
+
+      // Update mark price and execute paper trade for actionable signals
+      setLastPrice(symbol, price);
+      try {
+        if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id);
+        else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
+      } catch (err) {
+        logger.error({ err, symbol, signal }, "Paper trade execution failed");
+      }
 
       const recent: RecentSignal = {
         symbol, signal, confidence, price,
@@ -232,7 +242,8 @@ export function start(intervalSeconds?: number) {
   state.isRunning = true;
   state.nextRun = new Date(Date.now() + state.intervalSeconds * 1000).toISOString();
 
-  // Run immediately on start
+  // Initialize portfolio (idempotent) and run immediately
+  ensurePortfolio().catch((err) => logger.error({ err }, "Portfolio init failed"));
   runCycle().catch((err) => logger.error({ err }, "Auto-trader cycle error"));
 
   timer = setInterval(() => {

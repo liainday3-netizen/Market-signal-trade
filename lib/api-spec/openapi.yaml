@@ -114,6 +114,30 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Candle"
+  /trader/portfolio:
+    get:
+      operationId: getPortfolio
+      tags: [trader]
+      summary: Get paper trading portfolio snapshot
+      responses:
+        "200":
+          description: Portfolio snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSnapshot"
+  /trader/portfolio/reset:
+    post:
+      operationId: resetPortfolio
+      tags: [trader]
+      summary: Reset paper portfolio to starting capital
+      responses:
+        "200":
+          description: Reset portfolio snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSnapshot"
   /trader/status:
     get:
       operationId: getAutoTraderStatus
@@ -152,6 +176,51 @@ components:
           type: string
       required:
         - status
+    PortfolioPosition:
+      type: object
+      properties:
+        symbol: { type: string }
+        quantity: { type: number }
+        avgEntryPrice: { type: number }
+        currentPrice: { type: number }
+        marketValue: { type: number }
+        unrealizedPnl: { type: number }
+        unrealizedPnlPercent: { type: number }
+        openedAt: { type: string }
+      required: [symbol, quantity, avgEntryPrice, currentPrice, marketValue, unrealizedPnl, unrealizedPnlPercent, openedAt]
+    PortfolioTrade:
+      type: object
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        side: { type: string }
+        quantity: { type: number }
+        price: { type: number }
+        value: { type: number }
+        realizedPnl: { type: number, nullable: true }
+        timestamp: { type: string }
+      required: [id, symbol, side, quantity, price, value, timestamp]
+    PortfolioSnapshot:
+      type: object
+      properties:
+        startingCapital: { type: number }
+        cash: { type: number }
+        equity: { type: number }
+        pnl: { type: number }
+        pnlPercent: { type: number }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/PortfolioPosition" }
+        trades:
+          type: array
+          items: { $ref: "#/components/schemas/PortfolioTrade" }
+        totalTrades: { type: number }
+        closedTrades: { type: number }
+        wins: { type: number }
+        losses: { type: number }
+        winRate: { type: number }
+        totalRealizedPnl: { type: number }
+      required: [startingCapital, cash, equity, pnl, pnlPercent, positions, trades, totalTrades, closedTrades, wins, losses, winRate, totalRealizedPnl]
     AutoTraderStatus:
       type: object
       properties:

@@ -12,6 +12,7 @@ import { MetricsPanel } from "@/components/Dashboard/MetricsPanel";
 import { FactorScoresPanel } from "@/components/Dashboard/FactorScoresPanel";
 import { BacktestPanel } from "@/components/Dashboard/BacktestPanel";
 import { AutoTraderPanel } from "@/components/Dashboard/AutoTraderPanel";
+import { PortfolioPanel } from "@/components/Dashboard/PortfolioPanel";
 import { PriceChart } from "@/components/Dashboard/PriceChart";
 import { SignalHistory } from "@/components/Dashboard/SignalHistory";
 import { Button } from "@/components/ui/button";
@@ -142,7 +143,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 3: All-symbol signal history */}
+        {/* Row 3: Paper portfolio (full width) */}
+        <PortfolioPanel />
+
+        {/* Row 4: All-symbol signal history */}
         <SignalHistory data={historyData} isLoading={isLoadingHistory} />
 
       </main>

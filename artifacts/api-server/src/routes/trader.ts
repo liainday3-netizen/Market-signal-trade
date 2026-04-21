@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import * as autoTrader from "../lib/autoTrader";
+import * as paperTrader from "../lib/paperTrader";
 
 const router: IRouter = Router();
 
@@ -461,6 +462,27 @@ router.get("/market", async (req, res) => {
 
 router.get("/status", (_req, res) => {
   res.json(autoTrader.getState());
+});
+
+router.get("/portfolio", async (req, res) => {
+  try {
+    const snapshot = await paperTrader.getPortfolioSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching portfolio");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+router.post("/portfolio/reset", async (req, res) => {
+  try {
+    await paperTrader.resetPortfolio();
+    const snapshot = await paperTrader.getPortfolioSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    req.log.error({ err }, "Error resetting portfolio");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
 });
 
 router.post("/status", (req, res) => {

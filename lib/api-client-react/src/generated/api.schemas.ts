@@ -9,6 +9,44 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface PortfolioPosition {
+  symbol: string;
+  quantity: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  openedAt: string;
+}
+
+export interface PortfolioTrade {
+  id: number;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  value: number;
+  realizedPnl?: number | null;
+  timestamp: string;
+}
+
+export interface PortfolioSnapshot {
+  startingCapital: number;
+  cash: number;
+  equity: number;
+  pnl: number;
+  pnlPercent: number;
+  positions: PortfolioPosition[];
+  trades: PortfolioTrade[];
+  totalTrades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalRealizedPnl: number;
+}
+
 export interface RecentSignal {
   symbol: string;
   signal: string;
