@@ -5,6 +5,8 @@
  * AI Trader API
  * OpenAPI spec version: 0.1.0
  */
+import type { AutoTraderStatusDataSource } from "./autoTraderStatusDataSource";
+import type { AutoTraderStatusWsStatus } from "./autoTraderStatusWsStatus";
 import type { RecentSignal } from "./recentSignal";
 
 export interface AutoTraderStatus {
@@ -16,4 +18,6 @@ export interface AutoTraderStatus {
   nextRun?: string | null;
   activeSymbols: string[];
   lastSignals: RecentSignal[];
+  wsStatus: AutoTraderStatusWsStatus;
+  dataSource: AutoTraderStatusDataSource;
 }

@@ -246,6 +246,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentSignal"
+        wsStatus:
+          type: string
+          enum: [DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING]
+        dataSource:
+          type: string
+          enum: [websocket, rest]
       required:
         - isRunning
         - intervalSeconds
@@ -253,6 +259,8 @@ components:
         - signalsGenerated
         - activeSymbols
         - lastSignals
+        - wsStatus
+        - dataSource
     AutoTraderControl:
       type: object
       properties:

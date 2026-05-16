@@ -1,39 +1,10 @@
 import { db, signalsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { setLastPrice, executeBuy, executeSell, ensurePortfolio } from "./paperTrader";
+import * as binanceWs from "./binanceWs";
+import type { OHLCVRow } from "./binanceWs";
 
-// ─── Re-export trading engine (same logic as routes/trader.ts) ───────────────
-
-interface OHLCVRow { time: number; open: number; high: number; low: number; close: number; volume: number; }
-interface Features { returns: number; ma20: number; emaFast: number; emaSlow: number; volatility: number; rsi: number; macd: number; macdSignal: number; macdHist: number; bbUpper: number; bbLower: number; bbPct: number; atr: number; stochK: number; stochD: number; momentum: number; zScore: number; volumeTrend: number; }
-interface FactorScores { trend: number; momentum: number; meanReversion: number; volatility: number; volume: number; composite: number; }
-
-export interface RecentSignal {
-  symbol: string;
-  signal: string;
-  confidence: number;
-  price: number;
-  composite: number;
-  timestamp: string;
-}
-
-const BINANCE_SYMBOL_MAP: Record<string, string> = {
-  "BTC/USDT": "BTCUSDT", "ETH/USDT": "ETHUSDT", "SOL/USDT": "SOLUSDT", "BNB/USDT": "BNBUSDT",
-};
-
-async function fetchOHLCV(symbol: string, timeframe: string, limit: number): Promise<OHLCVRow[]> {
-  const sym = BINANCE_SYMBOL_MAP[symbol] ?? symbol.replace("/", "");
-  const intervalMap: Record<string, string> = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h" };
-  const interval = intervalMap[timeframe] ?? "1m";
-  const url = `https://api.binance.us/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
-  const raw = (await res.json()) as unknown[][];
-  return raw.map((c) => ({
-    time: c[0] as number, open: parseFloat(c[1] as string), high: parseFloat(c[2] as string),
-    low: parseFloat(c[3] as string), close: parseFloat(c[4] as string), volume: parseFloat(c[5] as string),
-  }));
-}
+// ─── Indicator helpers ────────────────────────────────────────────────────────
 
 function ema(values: number[], period: number): number[] {
   const k = 2 / (period + 1);
@@ -57,7 +28,7 @@ function rsi(closes: number[], period: number): number {
   return 100 - 100 / (1 + avgGain / avgLoss);
 }
 
-function computeFeatures(candles: OHLCVRow[]): Features & { price: number } {
+function computeFeatures(candles: OHLCVRow[]) {
   const closes = candles.map((c) => c.close);
   const n = closes.length;
   const rawReturns = closes.slice(1).map((c, i) => (c - closes[i]) / closes[i]);
@@ -99,7 +70,6 @@ function computeFeatures(candles: OHLCVRow[]): Features & { price: number } {
     kVals.push(high === low ? 50 : ((candles[i].close - low) / (high - low)) * 100);
   }
   const stochK = kVals[kVals.length - 1];
-  const stochD = kVals.slice(-3).reduce((a, b) => a + b, 0) / Math.min(3, kVals.length);
   const momentum = n >= 11 ? (closes[n - 1] / closes[n - 11] - 1) : 0;
   const zScore = std20 > 0 ? (currentPrice - ma20) / std20 : 0;
   let obv = 0;
@@ -111,44 +81,99 @@ function computeFeatures(candles: OHLCVRow[]): Features & { price: number } {
   }
   const maxAbs = Math.max(...obvSeries.map(Math.abs)) || 1;
   const volumeTrend = Math.max(-1, Math.min(1, (obvSeries[obvSeries.length - 1] - obvSeries[0]) / maxAbs / obvSeries.length));
-  return { returns: avgReturn, ma20, emaFast, emaSlow, volatility, rsi: rsiVal, macd: macdLine, macdSignal, macdHist, bbUpper, bbLower, bbPct, atr: atrVal, stochK, stochD, momentum, zScore, volumeTrend, price: currentPrice };
+  return { returns: avgReturn, ma20, emaFast, emaSlow, volatility, rsi: rsiVal, macd: macdLine, macdSignal, macdHist, bbUpper, bbLower, bbPct, atr: atrVal, stochK, momentum, zScore, volumeTrend, price: currentPrice };
 }
 
 function clamp(v: number, min = -1, max = 1) { return Math.max(min, Math.min(max, v)); }
 
-function computeFactorScores(features: Features): FactorScores {
-  const emaCrossScore = clamp((features.emaFast - features.emaSlow) / features.ma20 * 50);
-  const macdHistScore = clamp(features.macdHist / (Math.abs(features.macd) || 1));
-  const trend = clamp(emaCrossScore * 0.6 + macdHistScore * 0.4);
-  const momentumScore = clamp(features.momentum * 20);
-  const stochScore = clamp((features.stochK - 50) / 50);
+function computeFactorScores(f: ReturnType<typeof computeFeatures>) {
+  const emaCross = clamp((f.emaFast - f.emaSlow) / f.ma20 * 50);
+  const macdHistScore = clamp(f.macdHist / (Math.abs(f.macd) || 1));
+  const trend = clamp(emaCross * 0.6 + macdHistScore * 0.4);
+  const momentumScore = clamp(f.momentum * 20);
+  const stochScore = clamp((f.stochK - 50) / 50);
   const momentum = clamp(momentumScore * 0.6 + stochScore * 0.4);
-  const rsiScore = clamp(-((features.rsi - 50) / 30));
-  const bbScore = clamp(-(features.bbPct - 0.5) * 4);
-  const zScore = clamp(-features.zScore / 2);
-  const meanReversion = clamp(rsiScore * 0.4 + bbScore * 0.3 + zScore * 0.3);
-  const atrPct = features.atr / features.ma20;
+  const rsiScore = clamp(-((f.rsi - 50) / 30));
+  const bbScore = clamp(-(f.bbPct - 0.5) * 4);
+  const zScoreF = clamp(-f.zScore / 2);
+  const meanReversion = clamp(rsiScore * 0.4 + bbScore * 0.3 + zScoreF * 0.3);
+  const atrPct = f.atr / f.ma20;
   const volatility = clamp(1 - atrPct * 100);
-  const volume = clamp(features.volumeTrend);
+  const volume = clamp(f.volumeTrend);
   const composite = clamp(trend * 0.30 + momentum * 0.25 + meanReversion * 0.25 + volatility * 0.10 + volume * 0.10);
-  return {
-    trend: Math.round(trend * 1000) / 1000,
-    momentum: Math.round(momentum * 1000) / 1000,
-    meanReversion: Math.round(meanReversion * 1000) / 1000,
-    volatility: Math.round(volatility * 1000) / 1000,
-    volume: Math.round(volume * 1000) / 1000,
-    composite: Math.round(composite * 1000) / 1000,
-  };
+  return { trend, momentum, meanReversion, volatility, volume, composite: Math.round(composite * 1000) / 1000 };
 }
 
-function signalFromFactors(factors: FactorScores): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
-  const score = factors.composite;
-  const confidence = Math.round((score + 1) / 2 * 1000) / 1000;
-  const signal: "BUY" | "SELL" | "HOLD" = score > 0.15 ? "BUY" : score < -0.15 ? "SELL" : "HOLD";
+function signalFromComposite(composite: number): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
+  const confidence = Math.round((composite + 1) / 2 * 1000) / 1000;
+  const signal: "BUY" | "SELL" | "HOLD" = composite > 0.15 ? "BUY" : composite < -0.15 ? "SELL" : "HOLD";
   return { signal, confidence };
 }
 
+// ─── Fetch via REST (used to seed WS buffers) ─────────────────────────────────
+
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  "BTC/USDT": "BTCUSDT", "ETH/USDT": "ETHUSDT", "SOL/USDT": "SOLUSDT",
+};
+
+async function fetchOHLCV(symbol: string, timeframe: string, limit: number): Promise<OHLCVRow[]> {
+  const sym = BINANCE_SYMBOL_MAP[symbol] ?? symbol.replace("/", "");
+  const url = `https://api.binance.us/api/v3/klines?symbol=${sym}&interval=${timeframe}&limit=${limit}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Binance REST ${res.status}`);
+  const raw = (await res.json()) as unknown[][];
+  return raw.map((c) => ({
+    time: c[0] as number, open: parseFloat(c[1] as string), high: parseFloat(c[2] as string),
+    low: parseFloat(c[3] as string), close: parseFloat(c[4] as string), volume: parseFloat(c[5] as string),
+  }));
+}
+
+// ─── Core signal processing ───────────────────────────────────────────────────
+
+async function processSymbol(symbol: string, candles: OHLCVRow[]) {
+  const features = computeFeatures(candles);
+  const factors = computeFactorScores(features);
+  const { signal, confidence } = signalFromComposite(factors.composite);
+  const price = features.price;
+
+  const [insertedSignal] = await db.insert(signalsTable).values({
+    signal, confidence, price, symbol,
+    timeframe: "1m",
+    returns: features.returns,
+    ma: features.ma20,
+    volatility: features.volatility,
+    rsi: features.rsi,
+    macd: features.macd,
+  }).returning({ id: signalsTable.id });
+
+  setLastPrice(symbol, price);
+  try {
+    if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id);
+    else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
+  } catch (err) {
+    logger.error({ err, symbol, signal }, "Paper trade failed");
+  }
+
+  const recent: RecentSignal = { symbol, signal, confidence, price, composite: factors.composite, timestamp: new Date().toISOString() };
+  state.signalsGenerated++;
+  state.totalRuns++;
+  state.lastRun = new Date().toISOString();
+  state.nextRun = null;
+  state.lastSignals = [recent, ...state.lastSignals].slice(0, MAX_RECENT_SIGNALS);
+
+  logger.info({ symbol, signal, confidence, price, composite: factors.composite, source: "websocket" }, "Signal generated");
+}
+
 // ─── Auto-Trader State ────────────────────────────────────────────────────────
+
+export interface RecentSignal {
+  symbol: string;
+  signal: string;
+  confidence: number;
+  price: number;
+  composite: number;
+  timestamp: string;
+}
 
 export interface AutoTraderState {
   isRunning: boolean;
@@ -159,12 +184,13 @@ export interface AutoTraderState {
   nextRun: string | null;
   activeSymbols: string[];
   lastSignals: RecentSignal[];
+  wsStatus: binanceWs.WsStatus;
+  dataSource: "websocket" | "rest";
 }
 
 const DEFAULT_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"];
-const DEFAULT_TIMEFRAME = "1m";
 const DEFAULT_INTERVAL_S = 60;
-const MAX_RECENT_SIGNALS = 20;
+const MAX_RECENT_SIGNALS = 30;
 
 let state: AutoTraderState = {
   isRunning: false,
@@ -175,87 +201,74 @@ let state: AutoTraderState = {
   nextRun: null,
   activeSymbols: DEFAULT_SYMBOLS,
   lastSignals: [],
+  wsStatus: "DISCONNECTED",
+  dataSource: "websocket",
 };
 
-let timer: ReturnType<typeof setInterval> | null = null;
+// Fallback REST timer (fires if no WS signal for 2x interval)
+let _fallbackTimer: ReturnType<typeof setInterval> | null = null;
+let _lastSignalAt = 0;
 
-async function runCycle() {
-  const runStart = new Date().toISOString();
-  state.totalRuns++;
-  state.lastRun = runStart;
-  state.nextRun = new Date(Date.now() + state.intervalSeconds * 1000).toISOString();
-
-  logger.info({ totalRuns: state.totalRuns }, "Auto-trader cycle started");
-
-  const results = await Promise.allSettled(
-    state.activeSymbols.map(async (symbol) => {
-      const candles = await fetchOHLCV(symbol, DEFAULT_TIMEFRAME, 100);
-      if (candles.length < 35) throw new Error("Not enough candles");
-      const { price, ...features } = computeFeatures(candles);
-      const factors = computeFactorScores(features);
-      const { signal, confidence } = signalFromFactors(factors);
-
-      const [insertedSignal] = await db.insert(signalsTable).values({
-        signal, confidence, price, symbol,
-        timeframe: DEFAULT_TIMEFRAME,
-        returns: features.returns,
-        ma: features.ma20,
-        volatility: features.volatility,
-        rsi: features.rsi,
-        macd: features.macd,
-      }).returning({ id: signalsTable.id });
-
-      // Update mark price and execute paper trade for actionable signals
-      setLastPrice(symbol, price);
-      try {
-        if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id);
-        else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
-      } catch (err) {
-        logger.error({ err, symbol, signal }, "Paper trade execution failed");
-      }
-
-      const recent: RecentSignal = {
-        symbol, signal, confidence, price,
-        composite: factors.composite,
-        timestamp: new Date().toISOString(),
-      };
-
-      state.signalsGenerated++;
-      state.lastSignals = [recent, ...state.lastSignals].slice(0, MAX_RECENT_SIGNALS);
-
-      logger.info({ symbol, signal, confidence, price, composite: factors.composite }, "Signal generated");
-      return recent;
-    })
+function onCandleClose({ symbol, candles }: { symbol: string; candles: OHLCVRow[] }) {
+  _lastSignalAt = Date.now();
+  processSymbol(symbol, candles).catch((err) =>
+    logger.error({ err, symbol }, "processSymbol error"),
   );
+}
 
-  const failures = results.filter((r) => r.status === "rejected");
-  if (failures.length > 0) {
-    failures.forEach((f) => logger.warn({ err: (f as PromiseRejectedResult).reason }, "Symbol fetch failed"));
+function onStatusChange(status: binanceWs.WsStatus) {
+  state.wsStatus = status;
+}
+
+// REST fallback: if WS hasn't delivered a candle close in 2× interval, poll REST
+async function runRestFallback() {
+  if (!state.isRunning) return;
+  const elapsed = (Date.now() - _lastSignalAt) / 1000;
+  if (elapsed < state.intervalSeconds * 2) return;
+
+  logger.warn({ elapsed }, "WS idle — running REST fallback cycle");
+  for (const symbol of state.activeSymbols) {
+    try {
+      const candles = await fetchOHLCV(symbol, "1m", 100);
+      if (candles.length >= 35) await processSymbol(symbol, candles);
+    } catch (err) {
+      logger.error({ err, symbol }, "REST fallback failed");
+    }
   }
 }
 
 export function getState(): AutoTraderState { return { ...state }; }
 
 export function start(intervalSeconds?: number) {
-  if (timer) clearInterval(timer);
   if (intervalSeconds) state.intervalSeconds = intervalSeconds;
   state.isRunning = true;
-  state.nextRun = new Date(Date.now() + state.intervalSeconds * 1000).toISOString();
+  state.dataSource = "websocket";
+  _lastSignalAt = Date.now();
 
-  // Initialize portfolio (idempotent) and run immediately
   ensurePortfolio().catch((err) => logger.error({ err }, "Portfolio init failed"));
-  runCycle().catch((err) => logger.error({ err }, "Auto-trader cycle error"));
 
-  timer = setInterval(() => {
-    runCycle().catch((err) => logger.error({ err }, "Auto-trader cycle error"));
-  }, state.intervalSeconds * 1000);
+  // Wire WS events
+  binanceWs.wsEvents.off("candleClose", onCandleClose);
+  binanceWs.wsEvents.off("statusChange", onStatusChange);
+  binanceWs.wsEvents.on("candleClose", onCandleClose);
+  binanceWs.wsEvents.on("statusChange", onStatusChange);
 
-  logger.info({ intervalSeconds: state.intervalSeconds, symbols: state.activeSymbols }, "Auto-trader started");
+  binanceWs.connect(state.activeSymbols, fetchOHLCV);
+
+  // Fallback REST poll every interval
+  if (_fallbackTimer) clearInterval(_fallbackTimer);
+  _fallbackTimer = setInterval(runRestFallback, state.intervalSeconds * 1000);
+
+  logger.info({ symbols: state.activeSymbols, intervalSeconds: state.intervalSeconds }, "Auto-trader started (WS mode)");
 }
 
 export function stop() {
-  if (timer) { clearInterval(timer); timer = null; }
   state.isRunning = false;
+  binanceWs.wsEvents.off("candleClose", onCandleClose);
+  binanceWs.wsEvents.off("statusChange", onStatusChange);
+  binanceWs.disconnect();
+  if (_fallbackTimer) { clearInterval(_fallbackTimer); _fallbackTimer = null; }
+  state.wsStatus = "DISCONNECTED";
   state.nextRun = null;
   logger.info("Auto-trader stopped");
 }

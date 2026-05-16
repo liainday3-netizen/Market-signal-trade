@@ -3,6 +3,8 @@ import { db, signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import * as autoTrader from "../lib/autoTrader";
 import * as paperTrader from "../lib/paperTrader";
+import { wsEvents } from "../lib/binanceWs";
+import type { LiveTicker } from "../lib/binanceWs";
 
 const router: IRouter = Router();
 
@@ -458,6 +460,29 @@ router.get("/market", async (req, res) => {
     req.log.error({ err }, "Error fetching market data");
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
+});
+
+// SSE: live ticker stream (not in OpenAPI — browser EventSource)
+router.get("/live", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const onTicker = (ticker: LiveTicker) => {
+    res.write(`data: ${JSON.stringify(ticker)}\n\n`);
+  };
+
+  // Send a heartbeat every 15s to keep connection alive
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), 15000);
+
+  wsEvents.on("ticker", onTicker);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    wsEvents.off("ticker", onTicker);
+  });
 });
 
 router.get("/status", (_req, res) => {

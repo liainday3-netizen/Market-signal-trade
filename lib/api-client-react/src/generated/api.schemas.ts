@@ -47,6 +47,24 @@ export interface PortfolioSnapshot {
   totalRealizedPnl: number;
 }
 
+export type AutoTraderStatusWsStatus =
+  (typeof AutoTraderStatusWsStatus)[keyof typeof AutoTraderStatusWsStatus];
+
+export const AutoTraderStatusWsStatus = {
+  DISCONNECTED: "DISCONNECTED",
+  CONNECTING: "CONNECTING",
+  CONNECTED: "CONNECTED",
+  RECONNECTING: "RECONNECTING",
+} as const;
+
+export type AutoTraderStatusDataSource =
+  (typeof AutoTraderStatusDataSource)[keyof typeof AutoTraderStatusDataSource];
+
+export const AutoTraderStatusDataSource = {
+  websocket: "websocket",
+  rest: "rest",
+} as const;
+
 export interface RecentSignal {
   symbol: string;
   signal: string;
@@ -65,6 +83,8 @@ export interface AutoTraderStatus {
   nextRun?: string | null;
   activeSymbols: string[];
   lastSignals: RecentSignal[];
+  wsStatus: AutoTraderStatusWsStatus;
+  dataSource: AutoTraderStatusDataSource;
 }
 
 export type AutoTraderControlAction =

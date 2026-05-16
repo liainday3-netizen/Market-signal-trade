@@ -7,9 +7,11 @@ import { cn } from "@/lib/utils";
 interface SignalWidgetProps {
   data?: SignalResponse;
   isLoading: boolean;
+  livePrice?: number;
+  livePriceConnected?: boolean;
 }
 
-export function SignalWidget({ data, isLoading }: SignalWidgetProps) {
+export function SignalWidget({ data, isLoading, livePrice, livePriceConnected }: SignalWidgetProps) {
   if (isLoading || !data) {
     return (
       <Card className="h-full flex flex-col justify-center">
@@ -92,9 +94,12 @@ export function SignalWidget({ data, isLoading }: SignalWidgetProps) {
 
         {/* Price */}
         <div className="mt-auto pt-3 border-t border-border/40">
-          <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Live Price</p>
-          <p className="text-2xl font-mono text-foreground font-bold tracking-tight">
-            {formatCurrency(price)}
+          <div className="flex items-center gap-1.5 mb-1">
+            <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">Live Price</p>
+            <span className={cn("w-1.5 h-1.5 rounded-full", livePriceConnected ? "bg-buy animate-pulse" : "bg-muted-foreground/30")} />
+          </div>
+          <p className="text-2xl font-mono text-foreground font-bold tracking-tight tabular-nums transition-all duration-200">
+            {formatCurrency(livePrice ?? price)}
           </p>
         </div>
       </CardContent>

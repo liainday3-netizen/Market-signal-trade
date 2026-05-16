@@ -8,7 +8,7 @@ import type { RecentSignal } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Square, Zap, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Play, Square, Zap, TrendingUp, TrendingDown, Minus, Wifi, WifiOff, Loader } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict, format } from "date-fns";
 
@@ -120,20 +120,40 @@ export function AutoTraderPanel() {
 
       <CardContent className="flex-1 flex flex-col gap-3">
         {/* Status row */}
-        <div className="flex items-center gap-3 p-2.5 rounded-md bg-background/50 border border-border/40">
-          <div className="flex items-center gap-1.5">
-            <span className={cn("w-2 h-2 rounded-full", status.isRunning ? "bg-buy animate-pulse" : "bg-muted-foreground/40")} />
-            <span className={cn("text-xs font-mono font-bold", status.isRunning ? "text-buy" : "text-muted-foreground")}>
-              {status.isRunning ? "RUNNING" : "STOPPED"}
-            </span>
+        <div className="flex flex-col gap-1.5 p-2.5 rounded-md bg-background/50 border border-border/40">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className={cn("w-2 h-2 rounded-full", status.isRunning ? "bg-buy animate-pulse" : "bg-muted-foreground/40")} />
+              <span className={cn("text-xs font-mono font-bold", status.isRunning ? "text-buy" : "text-muted-foreground")}>
+                {status.isRunning ? "RUNNING" : "STOPPED"}
+              </span>
+            </div>
+            {status.isRunning && status.nextRun && (
+              <>
+                <span className="text-muted-foreground/30">|</span>
+                <span className="text-[10px] font-mono text-muted-foreground">Next in</span>
+                <Countdown nextRun={status.nextRun} />
+              </>
+            )}
           </div>
-          {status.isRunning && (
-            <>
-              <span className="text-muted-foreground/30">|</span>
-              <span className="text-[10px] font-mono text-muted-foreground">Next in</span>
-              <Countdown nextRun={status.nextRun} />
-            </>
-          )}
+          {/* WebSocket status */}
+          <div className="flex items-center gap-1.5">
+            {status.wsStatus === "CONNECTED" ? (
+              <Wifi className="w-3 h-3 text-buy" />
+            ) : status.wsStatus === "CONNECTING" || status.wsStatus === "RECONNECTING" ? (
+              <Loader className="w-3 h-3 text-hold animate-spin" />
+            ) : (
+              <WifiOff className="w-3 h-3 text-muted-foreground/40" />
+            )}
+            <span className={cn("text-[10px] font-mono", {
+              "text-buy": status.wsStatus === "CONNECTED",
+              "text-hold": status.wsStatus === "CONNECTING" || status.wsStatus === "RECONNECTING",
+              "text-muted-foreground/40": status.wsStatus === "DISCONNECTED",
+            })}>
+              WS {status.wsStatus}
+            </span>
+            <span className="text-muted-foreground/30 text-[10px] font-mono ml-auto">{status.dataSource?.toUpperCase()}</span>
+          </div>
         </div>
 
         {/* Stats row */}

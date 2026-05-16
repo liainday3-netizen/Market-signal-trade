@@ -222,6 +222,13 @@ export const GetAutoTraderStatusResponse = zod.object({
       timestamp: zod.string(),
     }),
   ),
+  wsStatus: zod.enum([
+    "DISCONNECTED",
+    "CONNECTING",
+    "CONNECTED",
+    "RECONNECTING",
+  ]),
+  dataSource: zod.enum(["websocket", "rest"]),
 });
 
 /**
@@ -250,4 +257,11 @@ export const ControlAutoTraderResponse = zod.object({
       timestamp: zod.string(),
     }),
   ),
+  wsStatus: zod.enum([
+    "DISCONNECTED",
+    "CONNECTING",
+    "CONNECTED",
+    "RECONNECTING",
+  ]),
+  dataSource: zod.enum(["websocket", "rest"]),
 });

@@ -17,6 +17,7 @@ import { PriceChart } from "@/components/Dashboard/PriceChart";
 import { SignalHistory } from "@/components/Dashboard/SignalHistory";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, SquareTerminal } from "lucide-react";
+import { useLivePrices } from "@/hooks/useLivePrices";
 import { useToast } from "@/hooks/use-toast";
 
 const SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"];
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [symbol, setSymbol] = useState("BTC/USDT");
   const [timeframe, setTimeframe] = useState("1m");
   const { toast } = useToast();
+  const { prices: livePrices, connected: liveConnected } = useLivePrices();
 
   const historyParams = { limit: 50 };
   const marketParams = { symbol, timeframe, limit: 100 };
@@ -127,7 +129,12 @@ export default function Dashboard() {
 
         {/* Row 1: Signal + Auto-Loop + Factor Scores + Backtest */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[260px]">
-          <SignalWidget data={signalData} isLoading={isLoadingSignal} />
+          <SignalWidget
+            data={signalData}
+            isLoading={isLoadingSignal}
+            livePrice={livePrices[symbol]?.price}
+            livePriceConnected={liveConnected}
+          />
           <AutoTraderPanel />
           <FactorScoresPanel factorScores={signalData?.factorScores} isLoading={isLoadingSignal} />
           <BacktestPanel backtest={signalData?.backtest} isLoading={isLoadingSignal} />
