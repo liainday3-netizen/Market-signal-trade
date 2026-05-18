@@ -21,10 +21,14 @@ import type {
   AutoTraderStatus,
   Candle,
   ErrorResponse,
+  ExchangeBalance,
   GetHistoryParams,
   GetMarketDataParams,
   GetSignalParams,
   HealthStatus,
+  LiveModeControl,
+  LivePortfolioSnapshot,
+  LiveTraderState,
   PortfolioSnapshot,
   SignalRecord,
   SignalResponse,
@@ -551,6 +555,317 @@ export const useResetPortfolio = <
 > => {
   return useMutation(getResetPortfolioMutationOptions(options));
 };
+
+/**
+ * @summary Get live trading mode state
+ */
+export const getGetLiveModeUrl = () => {
+  return `/api/trader/live-mode`;
+};
+
+export const getLiveMode = async (
+  options?: RequestInit,
+): Promise<LiveTraderState> => {
+  return customFetch<LiveTraderState>(getGetLiveModeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLiveModeQueryKey = () => {
+  return [`/api/trader/live-mode`] as const;
+};
+
+export const getGetLiveModeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLiveMode>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLiveMode>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLiveModeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLiveMode>>> = ({
+    signal,
+  }) => getLiveMode({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLiveMode>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLiveModeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLiveMode>>
+>;
+export type GetLiveModeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get live trading mode state
+ */
+
+export function useGetLiveMode<
+  TData = Awaited<ReturnType<typeof getLiveMode>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLiveMode>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLiveModeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Enable or disable live trading mode
+ */
+export const getSetLiveModeUrl = () => {
+  return `/api/trader/live-mode`;
+};
+
+export const setLiveMode = async (
+  liveModeControl: LiveModeControl,
+  options?: RequestInit,
+): Promise<LiveTraderState> => {
+  return customFetch<LiveTraderState>(getSetLiveModeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(liveModeControl),
+  });
+};
+
+export const getSetLiveModeMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setLiveMode>>,
+    TError,
+    { data: BodyType<LiveModeControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setLiveMode>>,
+  TError,
+  { data: BodyType<LiveModeControl> },
+  TContext
+> => {
+  const mutationKey = ["setLiveMode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setLiveMode>>,
+    { data: BodyType<LiveModeControl> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setLiveMode(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetLiveModeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setLiveMode>>
+>;
+export type SetLiveModeMutationBody = BodyType<LiveModeControl>;
+export type SetLiveModeMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Enable or disable live trading mode
+ */
+export const useSetLiveMode = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setLiveMode>>,
+    TError,
+    { data: BodyType<LiveModeControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setLiveMode>>,
+  TError,
+  { data: BodyType<LiveModeControl> },
+  TContext
+> => {
+  return useMutation(getSetLiveModeMutationOptions(options));
+};
+
+/**
+ * @summary Get live trading portfolio and exchange balances
+ */
+export const getGetLivePortfolioUrl = () => {
+  return `/api/trader/live-portfolio`;
+};
+
+export const getLivePortfolio = async (
+  options?: RequestInit,
+): Promise<LivePortfolioSnapshot> => {
+  return customFetch<LivePortfolioSnapshot>(getGetLivePortfolioUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLivePortfolioQueryKey = () => {
+  return [`/api/trader/live-portfolio`] as const;
+};
+
+export const getGetLivePortfolioQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLivePortfolio>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLivePortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLivePortfolioQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLivePortfolio>>
+  > = ({ signal }) => getLivePortfolio({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLivePortfolio>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLivePortfolioQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLivePortfolio>>
+>;
+export type GetLivePortfolioQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get live trading portfolio and exchange balances
+ */
+
+export function useGetLivePortfolio<
+  TData = Awaited<ReturnType<typeof getLivePortfolio>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLivePortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLivePortfolioQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Fetch raw balances from Coinbase
+ */
+export const getGetExchangeBalancesUrl = () => {
+  return `/api/trader/exchange/balances`;
+};
+
+export const getExchangeBalances = async (
+  options?: RequestInit,
+): Promise<ExchangeBalance[]> => {
+  return customFetch<ExchangeBalance[]>(getGetExchangeBalancesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetExchangeBalancesQueryKey = () => {
+  return [`/api/trader/exchange/balances`] as const;
+};
+
+export const getGetExchangeBalancesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExchangeBalances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getExchangeBalances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetExchangeBalancesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getExchangeBalances>>
+  > = ({ signal }) => getExchangeBalances({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExchangeBalances>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExchangeBalancesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExchangeBalances>>
+>;
+export type GetExchangeBalancesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Fetch raw balances from Coinbase
+ */
+
+export function useGetExchangeBalances<
+  TData = Awaited<ReturnType<typeof getExchangeBalances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getExchangeBalances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExchangeBalancesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get auto-trader loop status

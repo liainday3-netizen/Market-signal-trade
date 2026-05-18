@@ -202,6 +202,104 @@ export const ResetPortfolioResponse = zod.object({
 });
 
 /**
+ * @summary Get live trading mode state
+ */
+export const GetLiveModeResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  budgetUsdc: zod.number(),
+  positions: zod.record(
+    zod.string(),
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Enable or disable live trading mode
+ */
+export const SetLiveModeBody = zod.object({
+  enabled: zod.boolean().optional(),
+  budgetUsdc: zod.number().optional(),
+});
+
+export const SetLiveModeResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  budgetUsdc: zod.number(),
+  positions: zod.record(
+    zod.string(),
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get live trading portfolio and exchange balances
+ */
+export const GetLivePortfolioResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  budgetUsdc: zod.number(),
+  freeUsdc: zod.number(),
+  openPositions: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+  trades: zod.array(
+    zod.object({
+      id: zod.number(),
+      symbol: zod.string(),
+      side: zod.string(),
+      quantity: zod.number(),
+      price: zod.number(),
+      value: zod.number(),
+      realizedPnl: zod.number().nullish(),
+      timestamp: zod.string(),
+    }),
+  ),
+  totalTrades: zod.number(),
+  closedTrades: zod.number(),
+  wins: zod.number(),
+  losses: zod.number(),
+  winRate: zod.number(),
+  totalRealizedPnl: zod.number(),
+  exchangeBalances: zod.array(
+    zod.object({
+      currency: zod.string(),
+      total: zod.number(),
+      free: zod.number(),
+      used: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Fetch raw balances from Coinbase
+ */
+export const GetExchangeBalancesResponseItem = zod.object({
+  currency: zod.string(),
+  total: zod.number(),
+  free: zod.number(),
+  used: zod.number(),
+});
+export const GetExchangeBalancesResponse = zod.array(
+  GetExchangeBalancesResponseItem,
+);
+
+/**
  * @summary Get auto-trader loop status
  */
 export const GetAutoTraderStatusResponse = zod.object({

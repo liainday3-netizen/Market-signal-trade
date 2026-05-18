@@ -1,6 +1,7 @@
 import { db, signalsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { setLastPrice, executeBuy, executeSell, ensurePortfolio } from "./paperTrader";
+import * as liveTrader from "./liveTrader";
 import * as binanceWs from "./binanceWs";
 import type { OHLCVRow } from "./binanceWs";
 
@@ -147,11 +148,21 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   }).returning({ id: signalsTable.id });
 
   setLastPrice(symbol, price);
+
+  // Paper trades always
   try {
     if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id);
     else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "Paper trade failed");
+  }
+
+  // Live trades (only if live mode enabled and API keys set)
+  try {
+    if (signal === "BUY") await liveTrader.executeBuy(symbol, price, insertedSignal?.id);
+    else if (signal === "SELL") await liveTrader.executeSell(symbol, price, insertedSignal?.id);
+  } catch (err) {
+    logger.error({ err, symbol, signal }, "Live trade failed");
   }
 
   const recent: RecentSignal = { symbol, signal, confidence, price, composite: factors.composite, timestamp: new Date().toISOString() };

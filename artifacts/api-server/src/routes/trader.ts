@@ -3,6 +3,8 @@ import { db, signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import * as autoTrader from "../lib/autoTrader";
 import * as paperTrader from "../lib/paperTrader";
+import * as liveTrader from "../lib/liveTrader";
+import * as coinbaseExchange from "../lib/coinbaseExchange";
 import { wsEvents } from "../lib/binanceWs";
 import type { LiveTicker } from "../lib/binanceWs";
 
@@ -518,6 +520,44 @@ router.post("/status", (req, res) => {
     autoTrader.stop();
   }
   res.json(autoTrader.getState());
+});
+
+// ─── Live Trading Routes ───────────────────────────────────────────────────────
+
+router.get("/live-portfolio", async (req, res) => {
+  try {
+    const portfolio = await liveTrader.getLivePortfolio();
+    res.json(portfolio);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching live portfolio");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+router.post("/live-mode", (req, res) => {
+  const { enabled, budgetUsdc } = req.body as { enabled?: boolean; budgetUsdc?: number };
+  try {
+    if (typeof budgetUsdc === "number") liveTrader.setBudget(budgetUsdc);
+    if (typeof enabled === "boolean") liveTrader.setEnabled(enabled);
+    res.json(liveTrader.getState());
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+router.get("/live-mode", (_req, res) => {
+  liveTrader.refreshConfigured();
+  res.json(liveTrader.getState());
+});
+
+router.get("/exchange/balances", async (req, res) => {
+  try {
+    const balances = await coinbaseExchange.fetchBalances();
+    res.json(balances);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching exchange balances");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
 });
 
 export default router;

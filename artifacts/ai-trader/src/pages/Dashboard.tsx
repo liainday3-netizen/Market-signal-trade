@@ -13,6 +13,7 @@ import { FactorScoresPanel } from "@/components/Dashboard/FactorScoresPanel";
 import { BacktestPanel } from "@/components/Dashboard/BacktestPanel";
 import { AutoTraderPanel } from "@/components/Dashboard/AutoTraderPanel";
 import { PortfolioPanel } from "@/components/Dashboard/PortfolioPanel";
+import { LiveTradingPanel } from "@/components/Dashboard/LiveTradingPanel";
 import { PriceChart } from "@/components/Dashboard/PriceChart";
 import { SignalHistory } from "@/components/Dashboard/SignalHistory";
 import { Button } from "@/components/ui/button";
@@ -150,8 +151,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 3: Paper portfolio (full width) */}
-        <PortfolioPanel />
+        {/* Row 3: Paper portfolio + Live trading */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <PortfolioPanel />
+          </div>
+          <div className="lg:col-span-1">
+            <LiveTradingPanel />
+          </div>
+        </div>
 
         {/* Row 4: All-symbol signal history */}
         <SignalHistory data={historyData} isLoading={isLoadingHistory} />

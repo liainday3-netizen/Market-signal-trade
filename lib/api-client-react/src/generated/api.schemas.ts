@@ -184,6 +184,61 @@ export interface Candle {
   volume: number;
 }
 
+export interface ExchangeBalance {
+  currency: string;
+  total: number;
+  free: number;
+  used: number;
+}
+
+export interface LivePosition {
+  symbol: string;
+  quantity: number;
+  avgEntryPrice: number;
+  openedAt: string;
+}
+
+export interface LiveTrade {
+  id: number;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  value: number;
+  realizedPnl?: number | null;
+  timestamp: string;
+}
+
+export type LiveTraderStatePositions = { [key: string]: LivePosition };
+
+export interface LiveTraderState {
+  enabled: boolean;
+  configured: boolean;
+  budgetUsdc: number;
+  positions: LiveTraderStatePositions;
+}
+
+export interface LiveModeControl {
+  enabled?: boolean;
+  budgetUsdc?: number;
+}
+
+export interface LivePortfolioSnapshot {
+  enabled: boolean;
+  configured: boolean;
+  budgetUsdc: number;
+  freeUsdc: number;
+  openPositions: LivePosition[];
+  trades: LiveTrade[];
+  totalTrades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalRealizedPnl: number;
+  exchangeBalances: ExchangeBalance[];
+}
+
 export interface ErrorResponse {
   error: string;
 }

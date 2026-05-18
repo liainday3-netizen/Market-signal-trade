@@ -138,6 +138,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PortfolioSnapshot"
+  /trader/live-mode:
+    get:
+      operationId: getLiveMode
+      tags: [trader]
+      summary: Get live trading mode state
+      responses:
+        "200":
+          description: Live trader state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveTraderState"
+    post:
+      operationId: setLiveMode
+      tags: [trader]
+      summary: Enable or disable live trading mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LiveModeControl"
+      responses:
+        "200":
+          description: Updated live trader state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveTraderState"
+        "400":
+          description: Error (e.g. keys not configured)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /trader/live-portfolio:
+    get:
+      operationId: getLivePortfolio
+      tags: [trader]
+      summary: Get live trading portfolio and exchange balances
+      responses:
+        "200":
+          description: Live portfolio snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LivePortfolioSnapshot"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /trader/exchange/balances:
+    get:
+      operationId: getExchangeBalances
+      tags: [trader]
+      summary: Fetch raw balances from Coinbase
+      responses:
+        "200":
+          description: Exchange balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExchangeBalance"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /trader/status:
     get:
       operationId: getAutoTraderStatus
@@ -489,6 +562,73 @@ components:
         - low
         - close
         - volume
+    ExchangeBalance:
+      type: object
+      properties:
+        currency: { type: string }
+        total: { type: number }
+        free: { type: number }
+        used: { type: number }
+      required: [currency, total, free, used]
+    LivePosition:
+      type: object
+      properties:
+        symbol: { type: string }
+        quantity: { type: number }
+        avgEntryPrice: { type: number }
+        openedAt: { type: string }
+      required: [symbol, quantity, avgEntryPrice, openedAt]
+    LiveTrade:
+      type: object
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        side: { type: string }
+        quantity: { type: number }
+        price: { type: number }
+        value: { type: number }
+        realizedPnl: { type: number, nullable: true }
+        timestamp: { type: string }
+      required: [id, symbol, side, quantity, price, value, timestamp]
+    LiveTraderState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        budgetUsdc: { type: number }
+        positions:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/LivePosition"
+      required: [enabled, configured, budgetUsdc, positions]
+    LiveModeControl:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        budgetUsdc: { type: number }
+    LivePortfolioSnapshot:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        budgetUsdc: { type: number }
+        freeUsdc: { type: number }
+        openPositions:
+          type: array
+          items: { $ref: "#/components/schemas/LivePosition" }
+        trades:
+          type: array
+          items: { $ref: "#/components/schemas/LiveTrade" }
+        totalTrades: { type: number }
+        closedTrades: { type: number }
+        wins: { type: number }
+        losses: { type: number }
+        winRate: { type: number }
+        totalRealizedPnl: { type: number }
+        exchangeBalances:
+          type: array
+          items: { $ref: "#/components/schemas/ExchangeBalance" }
+      required: [enabled, configured, budgetUsdc, freeUsdc, openPositions, trades, totalTrades, closedTrades, wins, losses, winRate, totalRealizedPnl, exchangeBalances]
     ErrorResponse:
       type: object
       properties:
