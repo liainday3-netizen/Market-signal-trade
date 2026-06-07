@@ -39,9 +39,14 @@ export function getExchange(): AnyExchange {
     throw new Error("Coinbase API keys not configured. Set COINBASE_API_KEY and COINBASE_API_SECRET.");
   }
 
+  // Secrets stored in Replit may have literal \n instead of real newlines,
+  // and may have leading/trailing whitespace — normalise both
+  const cleanKey = apiKey.trim();
+  const cleanSecret = apiSecret.trim().replace(/\\n/g, "\n");
+
   _exchange = new ccxt["coinbaseadvanced"]({
-    apiKey,
-    apiSecret,
+    apiKey: cleanKey,
+    secret: cleanSecret,
     enableRateLimit: true,
     options: { defaultType: "spot" },
   });
