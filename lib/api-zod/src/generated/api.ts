@@ -300,6 +300,107 @@ export const GetExchangeBalancesResponse = zod.array(
 );
 
 /**
+ * @summary Get DEX trader state
+ */
+export const GetDexModeResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  walletAddress: zod.string().nullable(),
+  budgetUsdc: zod.number(),
+  totalTrades: zod.number(),
+  positions: zod.record(
+    zod.string(),
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Enable or disable DEX trading
+ */
+export const SetDexModeBody = zod.object({
+  enabled: zod.boolean().optional(),
+  budgetUsdc: zod.number().optional(),
+});
+
+export const SetDexModeResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  walletAddress: zod.string().nullable(),
+  budgetUsdc: zod.number(),
+  totalTrades: zod.number(),
+  positions: zod.record(
+    zod.string(),
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get DEX portfolio with on-chain balances and trade history
+ */
+export const GetDexPortfolioResponse = zod.object({
+  enabled: zod.boolean(),
+  configured: zod.boolean(),
+  walletAddress: zod.string().nullable(),
+  budgetUsdc: zod.number(),
+  openPositions: zod.array(
+    zod.object({
+      symbol: zod.string(),
+      quantity: zod.number(),
+      avgEntryPrice: zod.number(),
+      openedAt: zod.string(),
+    }),
+  ),
+  balances: zod
+    .object({
+      address: zod.string(),
+      usdc: zod.number(),
+      weth: zod.number(),
+      cbbtc: zod.number(),
+      ethGas: zod.number(),
+    })
+    .nullish(),
+  trades: zod.array(
+    zod.object({
+      id: zod.number(),
+      symbol: zod.string(),
+      side: zod.string(),
+      quantity: zod.number(),
+      price: zod.number(),
+      value: zod.number(),
+      realizedPnl: zod.number().nullish(),
+      timestamp: zod.string(),
+    }),
+  ),
+  totalTrades: zod.number(),
+  closedTrades: zod.number(),
+  wins: zod.number(),
+  losses: zod.number(),
+  winRate: zod.number(),
+  totalPnl: zod.number(),
+});
+
+/**
+ * @summary Fetch on-chain token balances from Base wallet
+ */
+export const GetDexBalancesResponse = zod.object({
+  address: zod.string(),
+  usdc: zod.number(),
+  weth: zod.number(),
+  cbbtc: zod.number(),
+  ethGas: zod.number(),
+});
+
+/**
  * @summary Get auto-trader loop status
  */
 export const GetAutoTraderStatusResponse = zod.object({

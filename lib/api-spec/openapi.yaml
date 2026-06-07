@@ -211,6 +211,83 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /trader/dex-mode:
+    get:
+      operationId: getDexMode
+      tags: [trader]
+      summary: Get DEX trader state
+      responses:
+        "200":
+          description: DEX trader state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DexTraderState"
+    post:
+      operationId: setDexMode
+      tags: [trader]
+      summary: Enable or disable DEX trading
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DexModeControl"
+      responses:
+        "200":
+          description: Updated DEX trader state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DexTraderState"
+        "400":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /trader/dex-portfolio:
+    get:
+      operationId: getDexPortfolio
+      tags: [trader]
+      summary: Get DEX portfolio with on-chain balances and trade history
+      responses:
+        "200":
+          description: DEX portfolio snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DexPortfolioSnapshot"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /trader/dex/balances:
+    get:
+      operationId: getDexBalances
+      tags: [trader]
+      summary: Fetch on-chain token balances from Base wallet
+      responses:
+        "200":
+          description: On-chain token balances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DexBalances"
+        "400":
+          description: Wallet not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /trader/status:
     get:
       operationId: getAutoTraderStatus
@@ -629,6 +706,76 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ExchangeBalance" }
       required: [enabled, configured, budgetUsdc, freeUsdc, openPositions, trades, totalTrades, closedTrades, wins, losses, winRate, totalRealizedPnl, exchangeBalances]
+    DexPosition:
+      type: object
+      properties:
+        symbol: { type: string }
+        quantity: { type: number }
+        avgEntryPrice: { type: number }
+        openedAt: { type: string }
+      required: [symbol, quantity, avgEntryPrice, openedAt]
+    DexBalances:
+      type: object
+      properties:
+        address: { type: string }
+        usdc: { type: number }
+        weth: { type: number }
+        cbbtc: { type: number }
+        ethGas: { type: number }
+      required: [address, usdc, weth, cbbtc, ethGas]
+    DexTraderState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        walletAddress: { type: string, nullable: true }
+        budgetUsdc: { type: number }
+        totalTrades: { type: number }
+        positions:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DexPosition"
+      required: [enabled, configured, walletAddress, budgetUsdc, totalTrades, positions]
+    DexModeControl:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        budgetUsdc: { type: number }
+    DexTrade:
+      type: object
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        side: { type: string }
+        quantity: { type: number }
+        price: { type: number }
+        value: { type: number }
+        realizedPnl: { type: number, nullable: true }
+        timestamp: { type: string }
+      required: [id, symbol, side, quantity, price, value, timestamp]
+    DexPortfolioSnapshot:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        walletAddress: { type: string, nullable: true }
+        budgetUsdc: { type: number }
+        openPositions:
+          type: array
+          items: { $ref: "#/components/schemas/DexPosition" }
+        balances:
+          $ref: "#/components/schemas/DexBalances"
+          nullable: true
+        trades:
+          type: array
+          items: { $ref: "#/components/schemas/DexTrade" }
+        totalTrades: { type: number }
+        closedTrades: { type: number }
+        wins: { type: number }
+        losses: { type: number }
+        winRate: { type: number }
+        totalPnl: { type: number }
+      required: [enabled, configured, walletAddress, budgetUsdc, openPositions, trades, totalTrades, closedTrades, wins, losses, winRate, totalPnl]
     ErrorResponse:
       type: object
       properties:

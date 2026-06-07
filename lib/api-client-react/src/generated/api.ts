@@ -20,6 +20,10 @@ import type {
   AutoTraderControl,
   AutoTraderStatus,
   Candle,
+  DexBalances,
+  DexModeControl,
+  DexPortfolioSnapshot,
+  DexTraderState,
   ErrorResponse,
   ExchangeBalance,
   GetHistoryParams,
@@ -859,6 +863,317 @@ export function useGetExchangeBalances<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetExchangeBalancesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get DEX trader state
+ */
+export const getGetDexModeUrl = () => {
+  return `/api/trader/dex-mode`;
+};
+
+export const getDexMode = async (
+  options?: RequestInit,
+): Promise<DexTraderState> => {
+  return customFetch<DexTraderState>(getGetDexModeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDexModeQueryKey = () => {
+  return [`/api/trader/dex-mode`] as const;
+};
+
+export const getGetDexModeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDexMode>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexMode>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDexModeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDexMode>>> = ({
+    signal,
+  }) => getDexMode({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDexMode>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDexModeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDexMode>>
+>;
+export type GetDexModeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get DEX trader state
+ */
+
+export function useGetDexMode<
+  TData = Awaited<ReturnType<typeof getDexMode>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexMode>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDexModeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Enable or disable DEX trading
+ */
+export const getSetDexModeUrl = () => {
+  return `/api/trader/dex-mode`;
+};
+
+export const setDexMode = async (
+  dexModeControl: DexModeControl,
+  options?: RequestInit,
+): Promise<DexTraderState> => {
+  return customFetch<DexTraderState>(getSetDexModeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dexModeControl),
+  });
+};
+
+export const getSetDexModeMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setDexMode>>,
+    TError,
+    { data: BodyType<DexModeControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setDexMode>>,
+  TError,
+  { data: BodyType<DexModeControl> },
+  TContext
+> => {
+  const mutationKey = ["setDexMode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setDexMode>>,
+    { data: BodyType<DexModeControl> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setDexMode(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetDexModeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setDexMode>>
+>;
+export type SetDexModeMutationBody = BodyType<DexModeControl>;
+export type SetDexModeMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Enable or disable DEX trading
+ */
+export const useSetDexMode = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setDexMode>>,
+    TError,
+    { data: BodyType<DexModeControl> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setDexMode>>,
+  TError,
+  { data: BodyType<DexModeControl> },
+  TContext
+> => {
+  return useMutation(getSetDexModeMutationOptions(options));
+};
+
+/**
+ * @summary Get DEX portfolio with on-chain balances and trade history
+ */
+export const getGetDexPortfolioUrl = () => {
+  return `/api/trader/dex-portfolio`;
+};
+
+export const getDexPortfolio = async (
+  options?: RequestInit,
+): Promise<DexPortfolioSnapshot> => {
+  return customFetch<DexPortfolioSnapshot>(getGetDexPortfolioUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDexPortfolioQueryKey = () => {
+  return [`/api/trader/dex-portfolio`] as const;
+};
+
+export const getGetDexPortfolioQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDexPortfolio>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexPortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDexPortfolioQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDexPortfolio>>> = ({
+    signal,
+  }) => getDexPortfolio({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDexPortfolio>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDexPortfolioQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDexPortfolio>>
+>;
+export type GetDexPortfolioQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get DEX portfolio with on-chain balances and trade history
+ */
+
+export function useGetDexPortfolio<
+  TData = Awaited<ReturnType<typeof getDexPortfolio>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexPortfolio>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDexPortfolioQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Fetch on-chain token balances from Base wallet
+ */
+export const getGetDexBalancesUrl = () => {
+  return `/api/trader/dex/balances`;
+};
+
+export const getDexBalances = async (
+  options?: RequestInit,
+): Promise<DexBalances> => {
+  return customFetch<DexBalances>(getGetDexBalancesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDexBalancesQueryKey = () => {
+  return [`/api/trader/dex/balances`] as const;
+};
+
+export const getGetDexBalancesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDexBalances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexBalances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDexBalancesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDexBalances>>> = ({
+    signal,
+  }) => getDexBalances({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDexBalances>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDexBalancesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDexBalances>>
+>;
+export type GetDexBalancesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Fetch on-chain token balances from Base wallet
+ */
+
+export function useGetDexBalances<
+  TData = Awaited<ReturnType<typeof getDexBalances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDexBalances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDexBalancesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -239,6 +239,64 @@ export interface LivePortfolioSnapshot {
   exchangeBalances: ExchangeBalance[];
 }
 
+export interface DexPosition {
+  symbol: string;
+  quantity: number;
+  avgEntryPrice: number;
+  openedAt: string;
+}
+
+export interface DexBalances {
+  address: string;
+  usdc: number;
+  weth: number;
+  cbbtc: number;
+  ethGas: number;
+}
+
+export type DexTraderStatePositions = { [key: string]: DexPosition };
+
+export interface DexTraderState {
+  enabled: boolean;
+  configured: boolean;
+  walletAddress: string | null;
+  budgetUsdc: number;
+  totalTrades: number;
+  positions: DexTraderStatePositions;
+}
+
+export interface DexModeControl {
+  enabled?: boolean;
+  budgetUsdc?: number;
+}
+
+export interface DexTrade {
+  id: number;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  value: number;
+  realizedPnl?: number | null;
+  timestamp: string;
+}
+
+export interface DexPortfolioSnapshot {
+  enabled: boolean;
+  configured: boolean;
+  walletAddress: string | null;
+  budgetUsdc: number;
+  openPositions: DexPosition[];
+  balances?: DexBalances | null;
+  trades: DexTrade[];
+  totalTrades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalPnl: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }

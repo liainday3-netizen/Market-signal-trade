@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { start as startAutoTrader } from "./lib/autoTrader";
+import { init as initDexTrader } from "./lib/baseDexTrader";
 
 const rawPort = process.env["PORT"];
 
@@ -16,5 +17,6 @@ if (Number.isNaN(port) || port <= 0) {
 
 app.listen(port, () => {
   logger.info({ port }, "Server listening");
+  initDexTrader();
   startAutoTrader(60);
 });

@@ -5,6 +5,7 @@ import * as autoTrader from "../lib/autoTrader";
 import * as paperTrader from "../lib/paperTrader";
 import * as liveTrader from "../lib/liveTrader";
 import * as coinbaseExchange from "../lib/coinbaseExchange";
+import * as dexTrader from "../lib/baseDexTrader";
 import { wsEvents } from "../lib/binanceWs";
 import type { LiveTicker } from "../lib/binanceWs";
 
@@ -556,6 +557,45 @@ router.get("/exchange/balances", async (req, res) => {
     res.json(balances);
   } catch (err) {
     req.log.error({ err }, "Error fetching exchange balances");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// ─── DEX Trading Routes (Base chain / Uniswap v3) ────────────────────────────
+
+router.get("/dex-mode", (_req, res) => {
+  dexTrader.init(); // re-read env to pick up newly set key
+  res.json(dexTrader.getState());
+});
+
+router.post("/dex-mode", (req, res) => {
+  const { enabled, budgetUsdc } = req.body as { enabled?: boolean; budgetUsdc?: number };
+  try {
+    if (typeof budgetUsdc === "number") dexTrader.setBudget(budgetUsdc);
+    if (typeof enabled === "boolean") dexTrader.setEnabled(enabled);
+    res.json(dexTrader.getState());
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+router.get("/dex-portfolio", async (req, res) => {
+  try {
+    const portfolio = await dexTrader.getDexPortfolio();
+    res.json(portfolio);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching DEX portfolio");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+router.get("/dex/balances", async (req, res) => {
+  try {
+    const balances = await dexTrader.getBalances();
+    if (!balances) { res.status(400).json({ error: "DEX wallet not configured" }); return; }
+    res.json(balances);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching DEX balances");
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
 });

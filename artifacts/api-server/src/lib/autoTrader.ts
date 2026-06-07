@@ -2,6 +2,7 @@ import { db, signalsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { setLastPrice, executeBuy, executeSell, ensurePortfolio } from "./paperTrader";
 import * as liveTrader from "./liveTrader";
+import * as dexTrader from "./baseDexTrader";
 import * as binanceWs from "./binanceWs";
 import type { OHLCVRow } from "./binanceWs";
 
@@ -163,6 +164,14 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
     else if (signal === "SELL") await liveTrader.executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "Live trade failed");
+  }
+
+  // DEX trades on Base chain (only if DEX mode enabled and wallet configured)
+  try {
+    if (signal === "BUY") await dexTrader.executeBuy(symbol, price, insertedSignal?.id);
+    else if (signal === "SELL") await dexTrader.executeSell(symbol, price, insertedSignal?.id);
+  } catch (err) {
+    logger.error({ err, symbol, signal }, "DEX trade failed");
   }
 
   const recent: RecentSignal = { symbol, signal, confidence, price, composite: factors.composite, timestamp: new Date().toISOString() };
