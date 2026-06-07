@@ -25,6 +25,19 @@ type AnyExchange = InstanceType<typeof ccxt["coinbaseadvanced"]>;
 
 let _exchange: AnyExchange | null = null;
 
+// ─── Symbol translation ───────────────────────────────────────────────────────
+// The quant engine uses Binance-style pairs (BTC/USDT, ETH/USDT, SOL/USDT).
+// Coinbase Advanced Trade uses USD pairs — translate before every exchange call.
+const COIN_SYMBOL_MAP: Record<string, string> = {
+  "BTC/USDT": "BTC/USD",
+  "ETH/USDT": "ETH/USD",
+  "SOL/USDT": "SOL/USD",
+};
+
+export function toExchangeSymbol(symbol: string): string {
+  return COIN_SYMBOL_MAP[symbol] ?? symbol;
+}
+
 export function isConfigured(): boolean {
   return !!(process.env.COINBASE_API_KEY && process.env.COINBASE_API_SECRET);
 }
@@ -85,26 +98,33 @@ export async function fetchBalances(): Promise<ExchangeBalance[]> {
 export async function fetchUsdcBalance(): Promise<number> {
   const ex = getExchange();
   const raw = await ex.fetchBalance();
-  return getBalanceField(raw, "free", "USDC") || getBalanceField(raw, "free", "USD");
+  // Coinbase accounts hold USD (not USDT). Check USD first, then USDC as fallback.
+  return (
+    getBalanceField(raw, "free", "USD") ||
+    getBalanceField(raw, "free", "USDC") ||
+    getBalanceField(raw, "free", "USDT")
+  );
 }
 
 export async function placeMarketBuy(symbol: string, usdcAmount: number): Promise<ExchangeOrder> {
   const ex = getExchange();
-  const ticker = await ex.fetchTicker(symbol);
+  const cbSymbol = toExchangeSymbol(symbol); // e.g. BTC/USDT → BTC/USD
+  const ticker = await ex.fetchTicker(cbSymbol);
   const price = ticker.last ?? ticker.bid ?? 0;
-  if (!price) throw new Error(`Cannot determine price for ${symbol}`);
+  if (!price) throw new Error(`Cannot determine price for ${cbSymbol}`);
 
   const quantity = usdcAmount / price;
 
-  logger.info({ symbol, usdcAmount, quantity, price }, "Placing real market BUY");
-  const order = await ex.createMarketBuyOrder(symbol, quantity);
+  logger.info({ symbol, cbSymbol, usdcAmount, quantity, price }, "Placing real market BUY");
+  const order = await ex.createMarketBuyOrder(cbSymbol, quantity);
   return normaliseOrder(order);
 }
 
 export async function placeMarketSell(symbol: string, quantity: number): Promise<ExchangeOrder> {
   const ex = getExchange();
-  logger.info({ symbol, quantity }, "Placing real market SELL");
-  const order = await ex.createMarketSellOrder(symbol, quantity);
+  const cbSymbol = toExchangeSymbol(symbol); // e.g. BTC/USDT → BTC/USD
+  logger.info({ symbol, cbSymbol, quantity }, "Placing real market SELL");
+  const order = await ex.createMarketSellOrder(cbSymbol, quantity);
   return normaliseOrder(order);
 }
 

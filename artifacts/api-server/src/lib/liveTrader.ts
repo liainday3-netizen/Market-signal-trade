@@ -189,7 +189,9 @@ export async function getLivePortfolio() {
     try {
       exchangeBalances = await exchange.fetchBalances();
       freeUsdc = await exchange.fetchUsdcBalance();
-    } catch (_) {}
+    } catch (err) {
+      logger.warn({ err }, "Live: failed to fetch exchange balances");
+    }
   }
 
   return {
