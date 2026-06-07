@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, signalsTable } from "@workspace/db";
+import { db, signalsTable, settingsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import * as autoTrader from "../lib/autoTrader";
 import * as paperTrader from "../lib/paperTrader";
@@ -9,6 +9,13 @@ import * as dexTrader from "../lib/baseDexTrader";
 import * as scalingEngine from "../lib/scalingEngine";
 import { wsEvents } from "../lib/binanceWs";
 import type { LiveTicker } from "../lib/binanceWs";
+import type { ScalingConfig } from "../lib/scalingEngine";
+
+async function persistScalingConfig(cfg: ScalingConfig): Promise<void> {
+  await db.insert(settingsTable)
+    .values({ key: "scaling.config", value: JSON.stringify(cfg) })
+    .onConflictDoUpdate({ target: settingsTable.key, set: { value: JSON.stringify(cfg) } });
+}
 
 const router: IRouter = Router();
 
@@ -536,11 +543,11 @@ router.get("/live-portfolio", async (req, res) => {
   }
 });
 
-router.post("/live-mode", (req, res) => {
+router.post("/live-mode", async (req, res) => {
   const { enabled, budgetUsdc } = req.body as { enabled?: boolean; budgetUsdc?: number };
   try {
-    if (typeof budgetUsdc === "number") liveTrader.setBudget(budgetUsdc);
-    if (typeof enabled === "boolean") liveTrader.setEnabled(enabled);
+    if (typeof budgetUsdc === "number") await liveTrader.setBudget(budgetUsdc);
+    if (typeof enabled === "boolean")   await liveTrader.setEnabled(enabled);
     res.json(liveTrader.getState());
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -652,14 +659,17 @@ router.get("/scaling", (_req, res) => {
   res.json(scalingEngine.getConfig());
 });
 
-router.post("/scaling", (req, res) => {
+router.post("/scaling", async (req, res) => {
   const { enabled, mode, stopLossPct, takeProfitPct, trailingStop, scaleInEnabled, maxScaleIns, autoCompound, compoundFraction } = req.body as Partial<import("../lib/scalingEngine").ScalingConfig>;
   const updated = scalingEngine.setConfig({ enabled, mode, stopLossPct, takeProfitPct, trailingStop, scaleInEnabled, maxScaleIns, autoCompound, compoundFraction });
+  await persistScalingConfig(updated);
   res.json(updated);
 });
 
-router.post("/scaling/reset", (_req, res) => {
-  res.json(scalingEngine.resetConfig());
+router.post("/scaling/reset", async (_req, res) => {
+  const cfg = scalingEngine.resetConfig();
+  await persistScalingConfig(cfg);
+  res.json(cfg);
 });
 
 export default router;
