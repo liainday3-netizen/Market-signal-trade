@@ -8,6 +8,8 @@ import {
   useGetLiveMode,
   useSetLiveMode,
   useGetLivePortfolio,
+  getGetLiveModeQueryKey,
+  getGetLivePortfolioQueryKey,
 } from "@workspace/api-client-react";
 import { AlertTriangle, Zap, DollarSign, TrendingUp, TrendingDown, ShieldOff, Shield } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -16,11 +18,12 @@ export function LiveTradingPanel() {
   const [confirming, setConfirming] = useState(false);
 
   const { data: modeData, refetch: refetchMode } = useGetLiveMode({
-    query: { refetchInterval: 5000 },
+    query: { queryKey: getGetLiveModeQueryKey(), refetchInterval: 5000 },
   });
 
   const { data: portfolioData, refetch: refetchPortfolio } = useGetLivePortfolio({
     query: {
+      queryKey: getGetLivePortfolioQueryKey(),
       enabled: modeData?.configured ?? false,
       refetchInterval: 10000,
     },
@@ -220,7 +223,7 @@ export function LiveTradingPanel() {
                   )}
                   <span className="text-muted-foreground w-14 shrink-0">{trade.symbol.replace("/USDT", "")}</span>
                   <span className="text-foreground">{formatCurrency(trade.price)}</span>
-                  {trade.realizedPnl !== null && (
+                  {trade.realizedPnl != null && (
                     <span className={cn("ml-auto shrink-0", trade.realizedPnl >= 0 ? "text-buy" : "text-sell")}>
                       {trade.realizedPnl >= 0 ? "+" : ""}{formatCurrency(trade.realizedPnl)}
                     </span>
