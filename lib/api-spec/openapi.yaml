@@ -824,11 +824,14 @@ components:
         mode:
           type: string
           enum: [fixed, tiered, linear]
-        stopLossPct:    { type: number }
-        takeProfitPct:  { type: number }
-        scaleInEnabled: { type: boolean }
-        maxScaleIns:    { type: number }
-      required: [enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns]
+        stopLossPct:      { type: number }
+        takeProfitPct:    { type: number }
+        trailingStop:     { type: boolean }
+        scaleInEnabled:   { type: boolean }
+        maxScaleIns:      { type: number }
+        autoCompound:     { type: boolean }
+        compoundFraction: { type: number }
+      required: [enabled, mode, stopLossPct, takeProfitPct, trailingStop, scaleInEnabled, maxScaleIns, autoCompound, compoundFraction]
     ErrorResponse:
       type: object
       properties:

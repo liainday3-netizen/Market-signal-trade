@@ -397,8 +397,11 @@ export const GetScalingConfigResponse = zod.object({
   mode: zod.enum(["fixed", "tiered", "linear"]),
   stopLossPct: zod.number(),
   takeProfitPct: zod.number(),
+  trailingStop: zod.boolean(),
   scaleInEnabled: zod.boolean(),
   maxScaleIns: zod.number(),
+  autoCompound: zod.boolean(),
+  compoundFraction: zod.number(),
 });
 
 /**
@@ -409,8 +412,11 @@ export const SetScalingConfigBody = zod.object({
   mode: zod.enum(["fixed", "tiered", "linear"]),
   stopLossPct: zod.number(),
   takeProfitPct: zod.number(),
+  trailingStop: zod.boolean(),
   scaleInEnabled: zod.boolean(),
   maxScaleIns: zod.number(),
+  autoCompound: zod.boolean(),
+  compoundFraction: zod.number(),
 });
 
 export const SetScalingConfigResponse = zod.object({
@@ -418,8 +424,11 @@ export const SetScalingConfigResponse = zod.object({
   mode: zod.enum(["fixed", "tiered", "linear"]),
   stopLossPct: zod.number(),
   takeProfitPct: zod.number(),
+  trailingStop: zod.boolean(),
   scaleInEnabled: zod.boolean(),
   maxScaleIns: zod.number(),
+  autoCompound: zod.boolean(),
+  compoundFraction: zod.number(),
 });
 
 /**
@@ -430,8 +439,11 @@ export const ResetScalingConfigResponse = zod.object({
   mode: zod.enum(["fixed", "tiered", "linear"]),
   stopLossPct: zod.number(),
   takeProfitPct: zod.number(),
+  trailingStop: zod.boolean(),
   scaleInEnabled: zod.boolean(),
   maxScaleIns: zod.number(),
+  autoCompound: zod.boolean(),
+  compoundFraction: zod.number(),
 });
 
 /**

@@ -311,8 +311,11 @@ export interface ScalingConfig {
   mode: ScalingConfigMode;
   stopLossPct: number;
   takeProfitPct: number;
+  trailingStop: boolean;
   scaleInEnabled: boolean;
   maxScaleIns: number;
+  autoCompound: boolean;
+  compoundFraction: number;
 }
 
 export interface ErrorResponse {

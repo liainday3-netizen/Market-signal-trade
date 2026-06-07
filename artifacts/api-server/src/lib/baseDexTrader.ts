@@ -301,6 +301,14 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
 
     _state.totalTrades++;
     delete _state.positions[symbol];
+    _hwDex.delete(symbol);
+
+    // Auto-compound: grow budget by fraction of realized profit
+    const compound = scaling.compoundAmount(realizedPnl);
+    if (compound > 0) {
+      _state.budgetUsdc += compound;
+      logger.info({ compound, newBudget: _state.budgetUsdc }, "DEX auto-compound applied");
+    }
 
     await db.insert(tradesTable).values({
       symbol, side: "DEX_SELL", price,
@@ -316,12 +324,21 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   }
 }
 
+// Trailing high-water per symbol
+const _hwDex = new Map<string, number>();
+
 // ─── Stop-loss / take-profit check ────────────────────────────────────────────
 export function checkSlTp(symbol: string, currentPrice: number): void {
   const position = _state.positions[symbol];
-  if (!position) return;
-  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
-    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "DEX stop-loss triggered");
+  if (!position) { _hwDex.delete(symbol); return; }
+
+  const prev = _hwDex.get(symbol) ?? position.avgEntryPrice;
+  const hw = Math.max(prev, currentPrice);
+  _hwDex.set(symbol, hw);
+
+  const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
+  if (scaling.isStopLoss(stopRef, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, hw, current: currentPrice }, "DEX trailing stop-loss triggered");
     executeSell(symbol, currentPrice).catch(() => {});
   } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "DEX take-profit triggered");

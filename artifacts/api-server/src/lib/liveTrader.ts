@@ -122,6 +122,14 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
     const realizedPnl = proceeds - cost;
 
     delete state.positions[symbol];
+    _hwLive.delete(symbol);
+
+    // Auto-compound: grow budget by fraction of realized profit
+    const compound = scaling.compoundAmount(realizedPnl);
+    if (compound > 0) {
+      state.budgetUsdc += compound;
+      logger.info({ compound, newBudget: state.budgetUsdc }, "Live auto-compound applied");
+    }
 
     await db.insert(tradesTable).values({
       symbol,
@@ -141,11 +149,20 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   }
 }
 
+// Trailing high-water per symbol
+const _hwLive = new Map<string, number>();
+
 export function checkSlTp(symbol: string, currentPrice: number): void {
   const position = state.positions[symbol];
-  if (!position) return;
-  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
-    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Live stop-loss triggered");
+  if (!position) { _hwLive.delete(symbol); return; }
+
+  const prev = _hwLive.get(symbol) ?? position.avgEntryPrice;
+  const hw = Math.max(prev, currentPrice);
+  _hwLive.set(symbol, hw);
+
+  const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
+  if (scaling.isStopLoss(stopRef, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, hw, current: currentPrice }, "Live trailing stop-loss triggered");
     executeSell(symbol, currentPrice).catch(() => {});
   } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Live take-profit triggered");

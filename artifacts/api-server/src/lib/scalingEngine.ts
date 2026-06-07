@@ -2,21 +2,27 @@
 // Centralised config + helpers used by paper, live, and DEX traders.
 
 export interface ScalingConfig {
-  enabled:        boolean;
-  mode:           "fixed" | "tiered" | "linear";
-  stopLossPct:    number;   // % drop from entry to auto-sell  (0 = off)
-  takeProfitPct:  number;   // % gain from entry to auto-sell  (0 = off)
-  scaleInEnabled: boolean;  // allow adding to an existing position
-  maxScaleIns:    number;   // max additional entries (1–3)
+  enabled:          boolean;
+  mode:             "fixed" | "tiered" | "linear";
+  stopLossPct:      number;      // % drop to auto-sell (0 = off)
+  takeProfitPct:    number;      // % gain to auto-sell (0 = off)
+  trailingStop:     boolean;     // stop-loss follows price up (trailing)
+  scaleInEnabled:   boolean;     // allow adding to an existing position
+  maxScaleIns:      number;      // max additional entries (1–3)
+  autoCompound:     boolean;     // reinvest a fraction of realized profits
+  compoundFraction: number;      // fraction of profit reinvested (0.0–1.0)
 }
 
 const DEFAULTS: ScalingConfig = {
-  enabled:        false,
-  mode:           "tiered",
-  stopLossPct:    3,
-  takeProfitPct:  5,
-  scaleInEnabled: false,
-  maxScaleIns:    2,
+  enabled:          true,     // on by default → activates with auto-loop
+  mode:             "tiered",
+  stopLossPct:      3,
+  takeProfitPct:    5,
+  trailingStop:     true,     // trailing stop protects gains automatically
+  scaleInEnabled:   false,
+  maxScaleIns:      2,
+  autoCompound:     true,     // reinvest 50% of profits by default
+  compoundFraction: 0.5,
 };
 
 let _cfg: ScalingConfig = { ...DEFAULTS };
@@ -57,10 +63,12 @@ export function calcMultiplier(composite: number): number {
   }
 }
 
-// ─── SL / TP helpers ──────────────────────────────────────────────────────────
-export function isStopLoss(entryPrice: number, currentPrice: number): boolean {
+// ─── Stop-loss check ──────────────────────────────────────────────────────────
+// `highWaterPrice` = entryPrice when trailingStop is off,
+//                  = max(entryPrice, highestPriceSeen) when on.
+export function isStopLoss(highWaterPrice: number, currentPrice: number): boolean {
   if (!_cfg.stopLossPct || _cfg.stopLossPct <= 0) return false;
-  return ((entryPrice - currentPrice) / entryPrice) * 100 >= _cfg.stopLossPct;
+  return ((highWaterPrice - currentPrice) / highWaterPrice) * 100 >= _cfg.stopLossPct;
 }
 
 export function isTakeProfit(entryPrice: number, currentPrice: number): boolean {
@@ -68,9 +76,19 @@ export function isTakeProfit(entryPrice: number, currentPrice: number): boolean 
   return ((currentPrice - entryPrice) / entryPrice) * 100 >= _cfg.takeProfitPct;
 }
 
+// ─── Trailing high-water price ────────────────────────────────────────────────
+// Returns the price used as the SL reference: entry or trailing high.
+export function highWaterPrice(entryPrice: number, highestSeen: number): number {
+  return _cfg.trailingStop ? Math.max(entryPrice, highestSeen) : entryPrice;
+}
+
+// ─── Auto-compound: returns how much extra to add to the budget ───────────────
+export function compoundAmount(realizedPnl: number): number {
+  if (!_cfg.autoCompound || !_cfg.compoundFraction) return 0;
+  return Math.max(0, realizedPnl * _cfg.compoundFraction);
+}
+
 // ─── Scale-in: should we add to an existing position? ────────────────────────
-// Returns true when the new signal composite is meaningfully stronger than the
-// entry composite (implies a higher-conviction re-entry is warranted).
 export function shouldScaleIn(
   existingScaleIns: number,
   newComposite: number,
@@ -78,6 +96,5 @@ export function shouldScaleIn(
 ): boolean {
   if (!_cfg.scaleInEnabled) return false;
   if (existingScaleIns >= _cfg.maxScaleIns) return false;
-  // Only scale in if the new signal is at least 20% stronger than the entry
   return Math.abs(newComposite) >= Math.abs(entryComposite) * 1.20;
 }

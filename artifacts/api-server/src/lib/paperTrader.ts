@@ -7,8 +7,9 @@ const STARTING_CAPITAL = 50;
 const PER_TRADE_CASH_FRACTION = 0.33;
 const MIN_TRADE_VALUE = 5;
 
-// In-memory scale-in tracking: symbol → { entryComposite, scaleIns }
-const _scaleIns = new Map<string, { entryComposite: number; scaleIns: number }>();
+// In-memory tracking per symbol
+const _scaleIns  = new Map<string, { entryComposite: number; scaleIns: number }>();
+const _highWater = new Map<string, number>(); // trailing stop high-water price
 
 const lastPrices = new Map<string, number>();
 
@@ -124,17 +125,25 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   });
 
   _scaleIns.delete(symbol);
+  _highWater.delete(symbol);
   logger.info({ symbol, quantity: position.quantity, price, realizedPnl }, "Paper SELL executed");
   return true;
 }
 
-// ─── Stop-loss / take-profit check ────────────────────────────────────────────
+// ─── Stop-loss / take-profit check (with trailing stop support) ───────────────
 export async function checkSlTp(symbol: string, currentPrice: number): Promise<"stop_loss" | "take_profit" | null> {
   const position = await getOpenPosition(symbol);
-  if (!position) return null;
+  if (!position) { _highWater.delete(symbol); return null; }
 
-  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
-    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Paper stop-loss triggered");
+  // Update trailing high-water mark
+  const prev = _highWater.get(symbol) ?? position.avgEntryPrice;
+  const hw = Math.max(prev, currentPrice);
+  _highWater.set(symbol, hw);
+
+  const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
+
+  if (scaling.isStopLoss(stopRef, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, hw, current: currentPrice }, "Paper trailing stop-loss triggered");
     await executeSell(symbol, currentPrice);
     return "stop_loss";
   }

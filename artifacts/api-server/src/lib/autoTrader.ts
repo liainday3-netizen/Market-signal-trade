@@ -279,6 +279,9 @@ export function start(intervalSeconds?: number) {
   state.dataSource = "websocket";
   _lastSignalAt = Date.now();
 
+  // Auto-enable scaling engine when loop starts
+  scaling.setConfig({ enabled: true });
+
   ensurePortfolio().catch((err) => logger.error({ err }, "Portfolio init failed"));
 
   // Wire WS events
