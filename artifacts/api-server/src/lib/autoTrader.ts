@@ -103,13 +103,16 @@ function computeFactorScores(f: ReturnType<typeof computeFeatures>) {
   const atrPct = f.atr / f.ma20;
   const volatility = clamp(1 - atrPct * 100);
   const volume = clamp(f.volumeTrend);
-  const composite = clamp(trend * 0.30 + momentum * 0.25 + meanReversion * 0.25 + volatility * 0.10 + volume * 0.10);
+  // Weights tuned for 1-min crypto: mean-reversion leads (0.30), trend reduced (0.20)
+  // to filter out noisy micro-trend breakouts; volatility raised (0.15) to require edge.
+  const composite = clamp(trend * 0.20 + momentum * 0.25 + meanReversion * 0.30 + volatility * 0.15 + volume * 0.10);
   return { trend, momentum, meanReversion, volatility, volume, composite: Math.round(composite * 1000) / 1000 };
 }
 
 function signalFromComposite(composite: number): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
   const confidence = Math.round((composite + 1) / 2 * 1000) / 1000;
-  const signal: "BUY" | "SELL" | "HOLD" = composite > 0.15 ? "BUY" : composite < -0.15 ? "SELL" : "HOLD";
+  // Threshold raised to ±0.25 (from ±0.15) to require higher conviction before acting
+  const signal: "BUY" | "SELL" | "HOLD" = composite > 0.25 ? "BUY" : composite < -0.25 ? "SELL" : "HOLD";
   return { signal, confidence };
 }
 
@@ -153,9 +156,13 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   const composite = factors.composite;
 
   // ── SL/TP check (runs before new signals, using current candle close price) ─
+  let paperSlTpFired = false;
   try {
     const sltp = await checkSlTp(symbol, price);
-    if (sltp) logger.info({ symbol, price, trigger: sltp }, "Paper SL/TP triggered");
+    if (sltp) {
+      paperSlTpFired = true;
+      logger.info({ symbol, price, trigger: sltp }, "Paper SL/TP triggered");
+    }
   } catch (err) {
     logger.error({ err, symbol }, "SL/TP check failed");
   }
@@ -165,9 +172,10 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   try { dexTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
 
   // ── Paper trades ──────────────────────────────────────────────────────────
+  // Skip signal-based SELL if SL/TP already closed the position this tick
   try {
     if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id, composite);
-    else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
+    else if (signal === "SELL" && !paperSlTpFired) await executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "Paper trade failed");
   }

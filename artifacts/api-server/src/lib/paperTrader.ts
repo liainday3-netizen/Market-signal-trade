@@ -6,12 +6,12 @@ import * as scaling from "./scalingEngine";
 const STARTING_CAPITAL = 50;
 const PER_TRADE_CASH_FRACTION = 0.33;
 const MIN_TRADE_VALUE = 5;
+const COOLDOWN_MS = 5 * 60 * 1000; // 5-minute re-entry cooldown after selling
 
 // In-memory tracking per symbol
-const _scaleIns  = new Map<string, { entryComposite: number; scaleIns: number }>();
-const _highWater = new Map<string, number>(); // trailing stop high-water price
-
-const lastPrices = new Map<string, number>();
+const _scaleIns   = new Map<string, { entryComposite: number; scaleIns: number }>();
+const _cooldowns  = new Map<string, number>(); // timestamp of last sell
+const lastPrices  = new Map<string, number>();
 
 export function setLastPrice(symbol: string, price: number) {
   lastPrices.set(symbol, price);
@@ -40,6 +40,14 @@ async function getOpenPosition(symbol: string) {
 }
 
 export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
+  // ── Re-entry cooldown: prevent whipsaw immediately after selling ───────────
+  const lastSell = _cooldowns.get(symbol);
+  if (lastSell && Date.now() - lastSell < COOLDOWN_MS) {
+    const remaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastSell)) / 1000);
+    logger.debug({ symbol, cooldownSecs: remaining }, "BUY skipped — symbol in cooldown");
+    return false;
+  }
+
   const cfg = scaling.getConfig();
   const multiplier = scaling.calcMultiplier(composite);
   const track = _scaleIns.get(symbol);
@@ -135,20 +143,23 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   });
 
   _scaleIns.delete(symbol);
-  _highWater.delete(symbol);
+  _cooldowns.set(symbol, Date.now()); // start cooldown after selling
   logger.info({ symbol, quantity: position.quantity, price, realizedPnl }, "Paper SELL executed");
   return true;
 }
 
-// ─── Stop-loss / take-profit check (with trailing stop support) ───────────────
+// ─── Stop-loss / take-profit check (with persistent trailing stop support) ────
 export async function checkSlTp(symbol: string, currentPrice: number): Promise<"stop_loss" | "take_profit" | null> {
   const position = await getOpenPosition(symbol);
-  if (!position) { _highWater.delete(symbol); return null; }
+  if (!position) return null;
 
-  // Update trailing high-water mark
-  const prev = _highWater.get(symbol) ?? position.avgEntryPrice;
+  // ── Update trailing high-water mark and persist to DB ─────────────────────
+  const prev = position.highWaterPrice ?? position.avgEntryPrice;
   const hw = Math.max(prev, currentPrice);
-  _highWater.set(symbol, hw);
+  if (hw > prev) {
+    // Only write if it changed — avoids unnecessary DB writes on flat price
+    await db.update(positionsTable).set({ highWaterPrice: hw, updatedAt: new Date() }).where(eq(positionsTable.id, position.id));
+  }
 
   const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
 
@@ -177,6 +188,9 @@ export interface PortfolioSnapshot {
     symbol: string;
     quantity: number;
     avgEntryPrice: number;
+    highWaterPrice: number;
+    stopLossPrice: number;
+    takeProfitPrice: number;
     currentPrice: number;
     marketValue: number;
     unrealizedPnl: number;
@@ -205,6 +219,7 @@ export async function getPortfolioSnapshot(): Promise<PortfolioSnapshot> {
   const portfolio = await ensurePortfolio();
   const openPositions = await db.select().from(positionsTable);
   const allTrades = await db.select().from(tradesTable).orderBy(desc(tradesTable.createdAt));
+  const cfg = scaling.getConfig();
 
   const positions = openPositions.map((pos) => {
     const currentPrice = lastPrices.get(pos.symbol) ?? pos.avgEntryPrice;
@@ -212,10 +227,17 @@ export async function getPortfolioSnapshot(): Promise<PortfolioSnapshot> {
     const cost = pos.quantity * pos.avgEntryPrice;
     const unrealizedPnl = marketValue - cost;
     const unrealizedPnlPercent = cost > 0 ? (unrealizedPnl / cost) * 100 : 0;
+    const hw = pos.highWaterPrice ?? pos.avgEntryPrice;
+    const stopRef = scaling.highWaterPrice(pos.avgEntryPrice, hw);
+    const stopLossPrice = stopRef * (1 - cfg.stopLossPct / 100);
+    const takeProfitPrice = pos.avgEntryPrice * (1 + cfg.takeProfitPct / 100);
     return {
       symbol: pos.symbol,
       quantity: pos.quantity,
       avgEntryPrice: pos.avgEntryPrice,
+      highWaterPrice: hw,
+      stopLossPrice,
+      takeProfitPrice,
       currentPrice,
       marketValue,
       unrealizedPnl,
@@ -267,5 +289,7 @@ export async function resetPortfolio(): Promise<void> {
     await tx.delete(positionsTable);
     await tx.delete(portfolioTable);
   });
+  _scaleIns.clear();
+  _cooldowns.clear();
   logger.info("Paper portfolio reset");
 }

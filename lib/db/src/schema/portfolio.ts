@@ -9,11 +9,13 @@ export const portfolioTable = pgTable("portfolio", {
 });
 
 // unique("positions_symbol_unique") prevents duplicate open positions per symbol
+// high_water_price persists the trailing-stop high-water mark across server restarts
 export const positionsTable = pgTable("positions", {
   id: serial("id").primaryKey(),
   symbol: text("symbol").notNull(),
   quantity: real("quantity").notNull(),
   avgEntryPrice: real("avg_entry_price").notNull(),
+  highWaterPrice: real("high_water_price"),
   openedAt: timestamp("opened_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [unique("positions_symbol_unique").on(t.symbol)]);

@@ -21,6 +21,47 @@ function PnLValue({ value, percent, size = "sm" }: { value: number; percent?: nu
   );
 }
 
+interface PositionData {
+  symbol: string;
+  quantity: number;
+  avgEntryPrice: number;
+  highWaterPrice?: number;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  openedAt: string;
+}
+
+function SlTpBar({ pos }: { pos: PositionData }) {
+  const sl = pos.stopLossPrice;
+  const tp = pos.takeProfitPrice;
+  const curr = pos.currentPrice;
+  if (!sl || !tp) return null;
+
+  const distToSl = ((curr - sl) / curr) * 100;
+  const distToTp = ((tp - curr) / curr) * 100;
+  const range = tp - sl;
+  const fillPct = range > 0 ? Math.max(0, Math.min(100, ((curr - sl) / range) * 100)) : 50;
+
+  return (
+    <div className="mt-1.5 space-y-0.5">
+      <div className="relative h-1.5 rounded-full bg-muted/40 overflow-hidden">
+        <div
+          className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-sell/60 via-hold/40 to-buy/60"
+          style={{ width: `${fillPct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[9px] font-mono">
+        <span className="text-sell/70">SL ${sl.toFixed(sl > 100 ? 0 : 2)} <span className="text-muted-foreground/40">({distToSl.toFixed(1)}%)</span></span>
+        <span className="text-buy/70">TP ${tp.toFixed(tp > 100 ? 0 : 2)} <span className="text-muted-foreground/40">({distToTp.toFixed(1)}%)</span></span>
+      </div>
+    </div>
+  );
+}
+
 export function PortfolioPanel() {
   const qc = useQueryClient();
   const { data: portfolio, isLoading } = useGetPortfolio({
@@ -45,6 +86,8 @@ export function PortfolioPanel() {
       </Card>
     );
   }
+
+  const positions = portfolio.positions as PositionData[];
 
   return (
     <Card className={cn("border", portfolio.pnl >= 0 ? "border-buy/20" : "border-sell/20")}>
@@ -106,39 +149,42 @@ export function PortfolioPanel() {
         {/* Open positions */}
         <div>
           <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-1.5">
-            Open Positions ({portfolio.positions.length})
+            Open Positions ({positions.length})
           </p>
-          {portfolio.positions.length === 0 ? (
+          {positions.length === 0 ? (
             <p className="text-[10px] text-muted-foreground/40 font-mono text-center py-3 border border-dashed border-border/40 rounded">
               No open positions
             </p>
           ) : (
-            <div className="space-y-1">
-              {portfolio.positions.map((pos) => {
+            <div className="space-y-2">
+              {positions.map((pos) => {
                 const isUp = pos.unrealizedPnl >= 0;
                 return (
-                  <div key={pos.symbol} className="flex items-center gap-2 p-2 rounded bg-background/40 border border-border/30">
-                    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold", isUp ? "text-buy bg-buy/10" : "text-sell bg-sell/10")}>
-                      {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                      {pos.symbol.replace("/USDT", "")}
-                    </span>
-                    <div className="flex-1 grid grid-cols-3 gap-2 text-[10px] font-mono">
-                      <div>
-                        <span className="text-muted-foreground/50">Qty </span>
-                        <span className="text-foreground tabular-nums">{pos.quantity.toFixed(6)}</span>
+                  <div key={pos.symbol} className="p-2 rounded bg-background/40 border border-border/30">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold", isUp ? "text-buy bg-buy/10" : "text-sell bg-sell/10")}>
+                        {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                        {pos.symbol.replace("/USDT", "")}
+                      </span>
+                      <div className="flex-1 grid grid-cols-3 gap-2 text-[10px] font-mono">
+                        <div>
+                          <span className="text-muted-foreground/50">Qty </span>
+                          <span className="text-foreground tabular-nums">{pos.quantity.toFixed(6)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground/50">Entry </span>
+                          <span className="text-foreground tabular-nums">${pos.avgEntryPrice.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground/50">Now </span>
+                          <span className="text-foreground tabular-nums">${pos.currentPrice.toFixed(2)}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-muted-foreground/50">Entry </span>
-                        <span className="text-foreground tabular-nums">${pos.avgEntryPrice.toFixed(2)}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground/50">Now </span>
-                        <span className="text-foreground tabular-nums">${pos.currentPrice.toFixed(2)}</span>
+                      <div className="text-right">
+                        <PnLValue value={pos.unrealizedPnl} percent={pos.unrealizedPnlPercent} />
                       </div>
                     </div>
-                    <div className="text-right">
-                      <PnLValue value={pos.unrealizedPnl} percent={pos.unrealizedPnlPercent} />
-                    </div>
+                    <SlTpBar pos={pos} />
                   </div>
                 );
               })}
@@ -157,7 +203,12 @@ export function PortfolioPanel() {
             <div className="max-h-48 overflow-y-auto space-y-0.5">
               {portfolio.trades.slice(0, 12).map((t) => (
                 <div key={t.id} className="flex items-center gap-2 py-1 border-b border-border/20 text-[10px] font-mono">
-                  <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold w-9 text-center", t.side === "BUY" ? "text-buy bg-buy/10" : "text-sell bg-sell/10")}>
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[9px] font-bold w-14 text-center",
+                    t.side === "BUY" ? "text-buy bg-buy/10" :
+                    t.side === "SELL" ? "text-sell bg-sell/10" :
+                    "text-hold bg-hold/10"
+                  )}>
                     {t.side}
                   </span>
                   <span className="text-foreground w-12">{t.symbol.replace("/USDT", "")}</span>
