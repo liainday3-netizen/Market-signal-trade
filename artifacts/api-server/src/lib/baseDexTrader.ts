@@ -10,6 +10,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { db, tradesTable } from "@workspace/db";
+import * as scaling from "./scalingEngine";
 import { logger } from "./logger";
 
 // ─── Token addresses on Base mainnet ─────────────────────────────────────────
@@ -208,7 +209,7 @@ async function swap(
 }
 
 // ─── BUY ──────────────────────────────────────────────────────────────────────
-export async function executeBuy(symbol: string, price: number, signalId?: number): Promise<boolean> {
+export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   if (!_state.enabled || !_state.configured) return false;
   if (!SYMBOL_MAP[symbol]) return false; // SOL not on Base
 
@@ -224,7 +225,8 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],
   }) as bigint;
   const usdcBalance = parseFloat(formatUnits(usdcRaw, TOKEN_DECIMALS.USDC));
-  const spendUsdc = Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33);
+  const multiplier = scaling.calcMultiplier(composite);
+  const spendUsdc = Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier;
 
   if (spendUsdc < 1) {
     logger.warn({ symbol, usdcBalance }, "DEX: insufficient USDC to BUY");
@@ -311,6 +313,19 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   } catch (err) {
     logger.error({ err, symbol }, "DEX SELL failed");
     return false;
+  }
+}
+
+// ─── Stop-loss / take-profit check ────────────────────────────────────────────
+export function checkSlTp(symbol: string, currentPrice: number): void {
+  const position = _state.positions[symbol];
+  if (!position) return;
+  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "DEX stop-loss triggered");
+    executeSell(symbol, currentPrice).catch(() => {});
+  } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "DEX take-profit triggered");
+    executeSell(symbol, currentPrice).catch(() => {});
   }
 }
 

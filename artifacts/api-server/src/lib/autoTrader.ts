@@ -1,9 +1,10 @@
 import { db, signalsTable } from "@workspace/db";
 import { logger } from "./logger";
-import { setLastPrice, executeBuy, executeSell, ensurePortfolio } from "./paperTrader";
+import { setLastPrice, executeBuy, executeSell, ensurePortfolio, checkSlTp } from "./paperTrader";
 import * as liveTrader from "./liveTrader";
 import * as dexTrader from "./baseDexTrader";
 import * as binanceWs from "./binanceWs";
+import * as scaling from "./scalingEngine";
 import type { OHLCVRow } from "./binanceWs";
 
 // ─── Indicator helpers ────────────────────────────────────────────────────────
@@ -149,26 +150,39 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   }).returning({ id: signalsTable.id });
 
   setLastPrice(symbol, price);
+  const composite = factors.composite;
 
-  // Paper trades always
+  // ── SL/TP check (runs before new signals, using current candle close price) ─
   try {
-    if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id);
+    const sltp = await checkSlTp(symbol, price);
+    if (sltp) logger.info({ symbol, price, trigger: sltp }, "Paper SL/TP triggered");
+  } catch (err) {
+    logger.error({ err, symbol }, "SL/TP check failed");
+  }
+  // Live SL/TP
+  try { liveTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
+  // DEX SL/TP
+  try { dexTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
+
+  // ── Paper trades ──────────────────────────────────────────────────────────
+  try {
+    if (signal === "BUY") await executeBuy(symbol, price, insertedSignal?.id, composite);
     else if (signal === "SELL") await executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "Paper trade failed");
   }
 
-  // Live trades (only if live mode enabled and API keys set)
+  // ── Live trades ───────────────────────────────────────────────────────────
   try {
-    if (signal === "BUY") await liveTrader.executeBuy(symbol, price, insertedSignal?.id);
+    if (signal === "BUY") await liveTrader.executeBuy(symbol, price, insertedSignal?.id, composite);
     else if (signal === "SELL") await liveTrader.executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "Live trade failed");
   }
 
-  // DEX trades on Base chain (only if DEX mode enabled and wallet configured)
+  // ── DEX trades on Base chain ──────────────────────────────────────────────
   try {
-    if (signal === "BUY") await dexTrader.executeBuy(symbol, price, insertedSignal?.id);
+    if (signal === "BUY") await dexTrader.executeBuy(symbol, price, insertedSignal?.id, composite);
     else if (signal === "SELL") await dexTrader.executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "DEX trade failed");

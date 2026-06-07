@@ -6,6 +6,7 @@ import * as paperTrader from "../lib/paperTrader";
 import * as liveTrader from "../lib/liveTrader";
 import * as coinbaseExchange from "../lib/coinbaseExchange";
 import * as dexTrader from "../lib/baseDexTrader";
+import * as scalingEngine from "../lib/scalingEngine";
 import { wsEvents } from "../lib/binanceWs";
 import type { LiveTicker } from "../lib/binanceWs";
 
@@ -598,6 +599,22 @@ router.get("/dex/balances", async (req, res) => {
     req.log.error({ err }, "Error fetching DEX balances");
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
+});
+
+// ─── Scaling config ───────────────────────────────────────────────────────────
+
+router.get("/scaling", (_req, res) => {
+  res.json(scalingEngine.getConfig());
+});
+
+router.post("/scaling", (req, res) => {
+  const { enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns } = req.body as Partial<import("../lib/scalingEngine").ScalingConfig>;
+  const updated = scalingEngine.setConfig({ enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns });
+  res.json(updated);
+});
+
+router.post("/scaling/reset", (_req, res) => {
+  res.json(scalingEngine.resetConfig());
 });
 
 export default router;

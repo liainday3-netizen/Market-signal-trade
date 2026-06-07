@@ -390,6 +390,51 @@ export const GetDexPortfolioResponse = zod.object({
 });
 
 /**
+ * @summary Get current scaling configuration
+ */
+export const GetScalingConfigResponse = zod.object({
+  enabled: zod.boolean(),
+  mode: zod.enum(["fixed", "tiered", "linear"]),
+  stopLossPct: zod.number(),
+  takeProfitPct: zod.number(),
+  scaleInEnabled: zod.boolean(),
+  maxScaleIns: zod.number(),
+});
+
+/**
+ * @summary Update scaling configuration
+ */
+export const SetScalingConfigBody = zod.object({
+  enabled: zod.boolean(),
+  mode: zod.enum(["fixed", "tiered", "linear"]),
+  stopLossPct: zod.number(),
+  takeProfitPct: zod.number(),
+  scaleInEnabled: zod.boolean(),
+  maxScaleIns: zod.number(),
+});
+
+export const SetScalingConfigResponse = zod.object({
+  enabled: zod.boolean(),
+  mode: zod.enum(["fixed", "tiered", "linear"]),
+  stopLossPct: zod.number(),
+  takeProfitPct: zod.number(),
+  scaleInEnabled: zod.boolean(),
+  maxScaleIns: zod.number(),
+});
+
+/**
+ * @summary Reset scaling configuration to defaults
+ */
+export const ResetScalingConfigResponse = zod.object({
+  enabled: zod.boolean(),
+  mode: zod.enum(["fixed", "tiered", "linear"]),
+  stopLossPct: zod.number(),
+  takeProfitPct: zod.number(),
+  scaleInEnabled: zod.boolean(),
+  maxScaleIns: zod.number(),
+});
+
+/**
  * @summary Fetch on-chain token balances from Base wallet
  */
 export const GetDexBalancesResponse = zod.object({

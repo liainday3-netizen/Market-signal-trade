@@ -297,6 +297,24 @@ export interface DexPortfolioSnapshot {
   totalPnl: number;
 }
 
+export type ScalingConfigMode =
+  (typeof ScalingConfigMode)[keyof typeof ScalingConfigMode];
+
+export const ScalingConfigMode = {
+  fixed: "fixed",
+  tiered: "tiered",
+  linear: "linear",
+} as const;
+
+export interface ScalingConfig {
+  enabled: boolean;
+  mode: ScalingConfigMode;
+  stopLossPct: number;
+  takeProfitPct: number;
+  scaleInEnabled: boolean;
+  maxScaleIns: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }

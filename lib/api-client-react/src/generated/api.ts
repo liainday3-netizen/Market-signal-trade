@@ -34,6 +34,7 @@ import type {
   LivePortfolioSnapshot,
   LiveTraderState,
   PortfolioSnapshot,
+  ScalingConfig,
   SignalRecord,
   SignalResponse,
 } from "./api.schemas";
@@ -1106,6 +1107,248 @@ export function useGetDexPortfolio<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get current scaling configuration
+ */
+export const getGetScalingConfigUrl = () => {
+  return `/api/trader/scaling`;
+};
+
+export const getScalingConfig = async (
+  options?: RequestInit,
+): Promise<ScalingConfig> => {
+  return customFetch<ScalingConfig>(getGetScalingConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScalingConfigQueryKey = () => {
+  return [`/api/trader/scaling`] as const;
+};
+
+export const getGetScalingConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScalingConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScalingConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScalingConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScalingConfig>>
+  > = ({ signal }) => getScalingConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScalingConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScalingConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScalingConfig>>
+>;
+export type GetScalingConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current scaling configuration
+ */
+
+export function useGetScalingConfig<
+  TData = Awaited<ReturnType<typeof getScalingConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScalingConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScalingConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update scaling configuration
+ */
+export const getSetScalingConfigUrl = () => {
+  return `/api/trader/scaling`;
+};
+
+export const setScalingConfig = async (
+  scalingConfig: ScalingConfig,
+  options?: RequestInit,
+): Promise<ScalingConfig> => {
+  return customFetch<ScalingConfig>(getSetScalingConfigUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(scalingConfig),
+  });
+};
+
+export const getSetScalingConfigMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setScalingConfig>>,
+    TError,
+    { data: BodyType<ScalingConfig> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setScalingConfig>>,
+  TError,
+  { data: BodyType<ScalingConfig> },
+  TContext
+> => {
+  const mutationKey = ["setScalingConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setScalingConfig>>,
+    { data: BodyType<ScalingConfig> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setScalingConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetScalingConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setScalingConfig>>
+>;
+export type SetScalingConfigMutationBody = BodyType<ScalingConfig>;
+export type SetScalingConfigMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update scaling configuration
+ */
+export const useSetScalingConfig = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setScalingConfig>>,
+    TError,
+    { data: BodyType<ScalingConfig> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setScalingConfig>>,
+  TError,
+  { data: BodyType<ScalingConfig> },
+  TContext
+> => {
+  return useMutation(getSetScalingConfigMutationOptions(options));
+};
+
+/**
+ * @summary Reset scaling configuration to defaults
+ */
+export const getResetScalingConfigUrl = () => {
+  return `/api/trader/scaling/reset`;
+};
+
+export const resetScalingConfig = async (
+  options?: RequestInit,
+): Promise<ScalingConfig> => {
+  return customFetch<ScalingConfig>(getResetScalingConfigUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResetScalingConfigMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetScalingConfig>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetScalingConfig>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["resetScalingConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetScalingConfig>>,
+    void
+  > = () => {
+    return resetScalingConfig(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetScalingConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetScalingConfig>>
+>;
+
+export type ResetScalingConfigMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reset scaling configuration to defaults
+ */
+export const useResetScalingConfig = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetScalingConfig>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetScalingConfig>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getResetScalingConfigMutationOptions(options));
+};
 
 /**
  * @summary Fetch on-chain token balances from Base wallet

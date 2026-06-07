@@ -2,6 +2,7 @@ import { db, tradesTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import { logger } from "./logger";
 import * as exchange from "./coinbaseExchange";
+import * as scaling from "./scalingEngine";
 
 const MIN_TRADE_USDC = 5;
 const PER_TRADE_FRACTION = 0.33;
@@ -49,7 +50,7 @@ export function refreshConfigured() {
   state.configured = exchange.isConfigured();
 }
 
-export async function executeBuy(symbol: string, price: number, signalId?: number): Promise<boolean> {
+export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   if (!state.enabled || !state.configured) return false;
   if (state.positions[symbol]) {
     logger.info({ symbol }, "Live: already have open position, skipping BUY");
@@ -64,8 +65,9 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     return false;
   }
 
+  const multiplier = scaling.calcMultiplier(composite);
   const allocation = Math.min(
-    Math.max(MIN_TRADE_USDC, freeUsdc * PER_TRADE_FRACTION),
+    Math.max(MIN_TRADE_USDC, freeUsdc * PER_TRADE_FRACTION) * multiplier,
     state.budgetUsdc,
   );
 
@@ -136,6 +138,18 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   } catch (err) {
     logger.error({ err, symbol }, "Live SELL failed");
     return false;
+  }
+}
+
+export function checkSlTp(symbol: string, currentPrice: number): void {
+  const position = state.positions[symbol];
+  if (!position) return;
+  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Live stop-loss triggered");
+    executeSell(symbol, currentPrice).catch(() => {});
+  } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Live take-profit triggered");
+    executeSell(symbol, currentPrice).catch(() => {});
   }
 }
 

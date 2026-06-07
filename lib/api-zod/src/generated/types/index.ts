@@ -38,6 +38,8 @@ export * from "./portfolioPosition";
 export * from "./portfolioSnapshot";
 export * from "./portfolioTrade";
 export * from "./recentSignal";
+export * from "./scalingConfig";
+export * from "./scalingConfigMode";
 export * from "./signalRecord";
 export * from "./signalResponse";
 export * from "./signalResponseSignal";

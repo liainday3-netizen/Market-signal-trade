@@ -264,6 +264,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /trader/scaling:
+    get:
+      operationId: getScalingConfig
+      tags: [trader]
+      summary: Get current scaling configuration
+      responses:
+        "200":
+          description: Scaling configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScalingConfig"
+    post:
+      operationId: setScalingConfig
+      tags: [trader]
+      summary: Update scaling configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScalingConfig"
+      responses:
+        "200":
+          description: Updated scaling configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScalingConfig"
+  /trader/scaling/reset:
+    post:
+      operationId: resetScalingConfig
+      tags: [trader]
+      summary: Reset scaling configuration to defaults
+      responses:
+        "200":
+          description: Default scaling configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScalingConfig"
   /trader/dex/balances:
     get:
       operationId: getDexBalances
@@ -776,6 +817,18 @@ components:
         winRate: { type: number }
         totalPnl: { type: number }
       required: [enabled, configured, walletAddress, budgetUsdc, openPositions, trades, totalTrades, closedTrades, wins, losses, winRate, totalPnl]
+    ScalingConfig:
+      type: object
+      properties:
+        enabled:        { type: boolean }
+        mode:
+          type: string
+          enum: [fixed, tiered, linear]
+        stopLossPct:    { type: number }
+        takeProfitPct:  { type: number }
+        scaleInEnabled: { type: boolean }
+        maxScaleIns:    { type: number }
+      required: [enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns]
     ErrorResponse:
       type: object
       properties:

@@ -1,10 +1,14 @@
 import { db, portfolioTable, positionsTable, tradesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { logger } from "./logger";
+import * as scaling from "./scalingEngine";
 
 const STARTING_CAPITAL = 50;
 const PER_TRADE_CASH_FRACTION = 0.33;
 const MIN_TRADE_VALUE = 5;
+
+// In-memory scale-in tracking: symbol → { entryComposite, scaleIns }
+const _scaleIns = new Map<string, { entryComposite: number; scaleIns: number }>();
 
 const lastPrices = new Map<string, number>();
 
@@ -34,14 +38,41 @@ async function getOpenPosition(symbol: string) {
   return rows[0] ?? null;
 }
 
-export async function executeBuy(symbol: string, price: number, signalId?: number): Promise<boolean> {
+export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   const portfolio = await ensurePortfolio();
   const existing = await getOpenPosition(symbol);
+  const cfg = scaling.getConfig();
+  const multiplier = scaling.calcMultiplier(composite);
+  const track = _scaleIns.get(symbol);
+
+  // ── Scale-in path: add to an existing position ─────────────────────────────
   if (existing) {
-    return false;
+    if (!cfg.scaleInEnabled || !scaling.shouldScaleIn(track?.scaleIns ?? 0, composite, track?.entryComposite ?? 0.15)) {
+      return false;
+    }
+
+    const addAllocation = Math.max(MIN_TRADE_VALUE * 0.5, portfolio.cash * PER_TRADE_CASH_FRACTION * multiplier * 0.5);
+    if (portfolio.cash < addAllocation) return false;
+
+    const addQty = addAllocation / price;
+    const newTotalQty = existing.quantity + addQty;
+    const newAvgPrice = ((existing.quantity * existing.avgEntryPrice) + (addQty * price)) / newTotalQty;
+    const newCash = portfolio.cash - addAllocation;
+
+    await db.transaction(async (tx) => {
+      await tx.update(portfolioTable).set({ cash: newCash, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
+      await tx.update(positionsTable).set({ quantity: newTotalQty, avgEntryPrice: newAvgPrice, updatedAt: new Date() }).where(eq(positionsTable.id, existing.id));
+      await tx.insert(tradesTable).values({ symbol, side: "SCALE_IN", quantity: addQty, price, value: addAllocation, realizedPnl: null, signalId: signalId ?? null });
+    });
+
+    _scaleIns.set(symbol, { entryComposite: track?.entryComposite ?? composite, scaleIns: (track?.scaleIns ?? 0) + 1 });
+    logger.info({ symbol, addQty, price, addAllocation, scaleIns: (track?.scaleIns ?? 0) + 1 }, "Paper SCALE-IN executed");
+    return true;
   }
 
-  const allocation = Math.max(MIN_TRADE_VALUE, portfolio.cash * PER_TRADE_CASH_FRACTION);
+  // ── New position ───────────────────────────────────────────────────────────
+  const baseAllocation = Math.max(MIN_TRADE_VALUE, portfolio.cash * PER_TRADE_CASH_FRACTION);
+  const allocation = baseAllocation * multiplier;
   if (allocation > portfolio.cash || portfolio.cash < MIN_TRADE_VALUE) {
     logger.warn({ symbol, cash: portfolio.cash }, "Insufficient cash to open position");
     return false;
@@ -51,29 +82,13 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
   const newCash = portfolio.cash - allocation;
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(portfolioTable)
-      .set({ cash: newCash, updatedAt: new Date() })
-      .where(eq(portfolioTable.id, portfolio.id));
-
-    await tx.insert(positionsTable).values({
-      symbol,
-      quantity,
-      avgEntryPrice: price,
-    });
-
-    await tx.insert(tradesTable).values({
-      symbol,
-      side: "BUY",
-      quantity,
-      price,
-      value: allocation,
-      realizedPnl: null,
-      signalId: signalId ?? null,
-    });
+    await tx.update(portfolioTable).set({ cash: newCash, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
+    await tx.insert(positionsTable).values({ symbol, quantity, avgEntryPrice: price });
+    await tx.insert(tradesTable).values({ symbol, side: "BUY", quantity, price, value: allocation, realizedPnl: null, signalId: signalId ?? null });
   });
 
-  logger.info({ symbol, quantity, price, allocation }, "Paper BUY executed");
+  _scaleIns.set(symbol, { entryComposite: composite, scaleIns: 0 });
+  logger.info({ symbol, quantity, price, allocation, multiplier }, "Paper BUY executed");
   return true;
 }
 
@@ -108,8 +123,29 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
     });
   });
 
+  _scaleIns.delete(symbol);
   logger.info({ symbol, quantity: position.quantity, price, realizedPnl }, "Paper SELL executed");
   return true;
+}
+
+// ─── Stop-loss / take-profit check ────────────────────────────────────────────
+export async function checkSlTp(symbol: string, currentPrice: number): Promise<"stop_loss" | "take_profit" | null> {
+  const position = await getOpenPosition(symbol);
+  if (!position) return null;
+
+  if (scaling.isStopLoss(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Paper stop-loss triggered");
+    await executeSell(symbol, currentPrice);
+    return "stop_loss";
+  }
+
+  if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
+    logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Paper take-profit triggered");
+    await executeSell(symbol, currentPrice);
+    return "take_profit";
+  }
+
+  return null;
 }
 
 export interface PortfolioSnapshot {
