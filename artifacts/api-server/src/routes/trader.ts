@@ -562,6 +562,31 @@ router.get("/exchange/balances", async (req, res) => {
   }
 });
 
+router.get("/exchange/diagnose", async (req, res) => {
+  const apiKey    = process.env.COINBASE_API_KEY?.trim() ?? "";
+  const apiSecret = process.env.COINBASE_API_SECRET?.trim() ?? "";
+  const report: Record<string, unknown> = {
+    keyPresent:    !!apiKey,
+    keyLength:     apiKey.length,
+    keyPreview:    apiKey ? `${apiKey.slice(0, 12)}…` : null,
+    secretPresent: !!apiSecret,
+    secretLength:  apiSecret.length,
+    secretPreview: apiSecret ? `${apiSecret.slice(0, 12)}…` : null,
+    isConfigured:  coinbaseExchange.isConfigured(),
+  };
+  try {
+    const balances = await coinbaseExchange.fetchBalances();
+    report.balanceFetchOk = true;
+    report.nonZeroBalances = balances.filter((b) => b.total > 0);
+    report.allCurrencies   = balances.map((b) => b.currency);
+  } catch (err) {
+    report.balanceFetchOk    = false;
+    report.balanceError      = err instanceof Error ? err.message : String(err);
+    report.balanceErrorClass = err instanceof Error ? err.constructor.name : "Unknown";
+  }
+  res.json(report);
+});
+
 // ─── DEX Trading Routes (Base chain / Uniswap v3) ────────────────────────────
 
 // ── Connect / disconnect wallet via UI ────────────────────────────────────────
