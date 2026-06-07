@@ -564,6 +564,26 @@ router.get("/exchange/balances", async (req, res) => {
 
 // ─── DEX Trading Routes (Base chain / Uniswap v3) ────────────────────────────
 
+// ── Connect / disconnect wallet via UI ────────────────────────────────────────
+router.post("/dex-wallet", (req, res) => {
+  const { privateKey } = req.body as { privateKey?: string };
+  if (!privateKey || typeof privateKey !== "string" || !privateKey.trim()) {
+    res.status(400).json({ error: "privateKey is required" });
+    return;
+  }
+  try {
+    const result = dexTrader.connectPrivateKey(privateKey);
+    res.json({ address: result.address, configured: true });
+  } catch {
+    res.status(400).json({ error: "Invalid private key — must be a 32-byte hex string (with or without 0x prefix)" });
+  }
+});
+
+router.delete("/dex-wallet", (_req, res) => {
+  dexTrader.disconnectWallet();
+  res.json(dexTrader.getState());
+});
+
 router.get("/dex-mode", (_req, res) => {
   dexTrader.init(); // re-read env to pick up newly set key
   res.json(dexTrader.getState());

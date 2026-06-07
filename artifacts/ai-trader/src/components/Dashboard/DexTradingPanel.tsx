@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
@@ -11,15 +13,49 @@ import {
   getGetDexModeQueryKey,
   getGetDexPortfolioQueryKey,
 } from "@workspace/api-client-react";
-import { AlertTriangle, Cpu, TrendingUp, TrendingDown, ShieldOff, Shield, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  Cpu,
+  TrendingUp,
+  TrendingDown,
+  ShieldOff,
+  Shield,
+  Wallet,
+  Key,
+  Eye,
+  EyeOff,
+  Unplug,
+  CheckCircle2,
+  Copy,
+} from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+async function postDexWallet(privateKey: string): Promise<{ address: string; configured: boolean }> {
+  const res = await fetch("/api/trader/dex-wallet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ privateKey }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Failed to connect wallet");
+  return data;
+}
+
+async function deleteDexWallet(): Promise<void> {
+  await fetch("/api/trader/dex-wallet", { method: "DELETE" });
+}
+
 export function DexTradingPanel() {
-  const [confirming, setConfirming] = useState(false);
+  const qc = useQueryClient();
+  const [confirming, setConfirming]       = useState(false);
+  const [showConnectForm, setShowConnect] = useState(false);
+  const [pkInput, setPkInput]             = useState("");
+  const [showPk, setShowPk]               = useState(false);
+  const [copied, setCopied]               = useState(false);
 
   const { data: modeData, refetch: refetchMode } = useGetDexMode({
     query: { queryKey: getGetDexModeQueryKey(), refetchInterval: 5000 },
@@ -33,7 +69,7 @@ export function DexTradingPanel() {
     },
   });
 
-  const { mutate: setMode, isPending } = useSetDexMode({
+  const { mutate: setMode, isPending: isModeChanging } = useSetDexMode({
     mutation: {
       onSuccess: () => {
         refetchMode();
@@ -43,21 +79,44 @@ export function DexTradingPanel() {
     },
   });
 
+  const { mutate: connectWallet, isPending: isConnecting, error: connectError, reset: resetConnect } = useMutation({
+    mutationFn: () => postDexWallet(pkInput),
+    onSuccess: () => {
+      setPkInput("");
+      setShowConnect(false);
+      setShowPk(false);
+      qc.invalidateQueries({ queryKey: getGetDexModeQueryKey() });
+      refetchMode();
+    },
+  });
+
+  const { mutate: disconnectWallet, isPending: isDisconnecting } = useMutation({
+    mutationFn: deleteDexWallet,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: getGetDexModeQueryKey() });
+      refetchMode();
+      setConfirming(false);
+    },
+  });
+
   const isEnabled    = modeData?.enabled    ?? false;
   const isConfigured = modeData?.configured ?? false;
   const wallet       = modeData?.walletAddress ?? null;
   const budget       = modeData?.budgetUsdc  ?? 15;
   const balances     = portfolioData?.balances ?? null;
 
-  const handleToggle = () => {
-    if (!isEnabled) setConfirming(true);
-    else setMode({ data: { enabled: false } });
+  const handleCopyAddr = () => {
+    if (!wallet) return;
+    navigator.clipboard.writeText(wallet).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
   };
 
   return (
     <Card className={cn(
       "h-full flex flex-col border",
-      isEnabled ? "border-blue-500/40" : "border-border",
+      isEnabled ? "border-blue-500/40" : isConfigured ? "border-border/60" : "border-border",
     )}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -83,35 +142,123 @@ export function DexTradingPanel() {
 
       <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
 
-        {/* Wallet not set */}
-        {!isConfigured && (
-          <div className="flex items-start gap-2 p-2.5 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
-            <p className="text-[10px] font-mono text-yellow-300 leading-relaxed">
-              Add <span className="text-yellow-200">DEX_WALLET_PRIVATE_KEY</span> in Secrets to enable on-chain trading.
+        {/* ── Wallet not connected ─────────────────────────────────────────── */}
+        {!isConfigured && !showConnectForm && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-background/60 border border-border/50">
+              <Wallet className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+                  No wallet connected. Connect a Base chain wallet to enable on-chain trading via Uniswap v3.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => { setShowConnect(true); resetConnect(); }}
+              className="h-7 text-[11px] font-mono bg-blue-600 hover:bg-blue-700 text-white w-full"
+            >
+              <Key className="w-3 h-3 mr-1.5" />
+              Connect Wallet
+            </Button>
+          </div>
+        )}
+
+        {/* ── Connect form ─────────────────────────────────────────────────── */}
+        {!isConfigured && showConnectForm && (
+          <div className="flex flex-col gap-2 p-2.5 rounded-md bg-background/60 border border-blue-500/20">
+            <div className="flex items-center justify-between mb-0.5">
+              <p className="text-[10px] font-mono text-blue-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                <Key className="w-3 h-3" /> Enter Private Key
+              </p>
+              <button
+                onClick={() => { setShowConnect(false); setPkInput(""); resetConnect(); }}
+                className="text-[9px] font-mono text-muted-foreground/60 hover:text-muted-foreground"
+              >
+                cancel
+              </button>
+            </div>
+
+            <div className="relative">
+              <Input
+                type={showPk ? "text" : "password"}
+                placeholder="0x... or raw 64-char hex"
+                value={pkInput}
+                onChange={(e) => { setPkInput(e.target.value); resetConnect(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && pkInput.trim()) connectWallet(); }}
+                className="h-8 text-[11px] font-mono pr-8 bg-background/80 border-border/60"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPk((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-muted-foreground"
+              >
+                {showPk ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {connectError && (
+              <p className="text-[10px] font-mono text-sell leading-snug">
+                {(connectError as Error).message}
+              </p>
+            )}
+
+            <Button
+              size="sm"
+              onClick={() => connectWallet()}
+              disabled={!pkInput.trim() || isConnecting}
+              className="h-7 text-[11px] font-mono bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isConnecting ? "Connecting…" : "Connect"}
+            </Button>
+
+            <p className="text-[9px] font-mono text-muted-foreground/50 leading-relaxed border-t border-border/30 pt-2">
+              Key is stored <strong>in memory only</strong> for this session. To persist across restarts,
+              save it in Replit Secrets as <span className="text-muted-foreground">DEX_WALLET_PRIVATE_KEY</span>.
             </p>
           </div>
         )}
 
-        {/* Wallet address */}
+        {/* ── Connected wallet row ─────────────────────────────────────────── */}
         {isConfigured && wallet && (
           <div className="flex items-center gap-2 p-2 rounded-md bg-background/50 border border-border/40">
-            <Wallet className="w-3 h-3 text-muted-foreground shrink-0" />
-            <span className="text-[10px] font-mono text-muted-foreground">{shortAddr(wallet)}</span>
+            <CheckCircle2 className="w-3 h-3 text-buy shrink-0" />
+            <button
+              onClick={handleCopyAddr}
+              className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+              title={wallet}
+            >
+              {shortAddr(wallet)}
+              {copied
+                ? <CheckCircle2 className="w-2.5 h-2.5 text-buy" />
+                : <Copy className="w-2.5 h-2.5 opacity-40" />}
+            </button>
             {balances && (
-              <span className="ml-auto text-[10px] font-mono text-blue-400">
+              <span className="ml-auto text-[10px] font-mono text-blue-400 shrink-0">
                 {balances.usdc.toFixed(2)} USDC
               </span>
             )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => disconnectWallet()}
+              disabled={isDisconnecting}
+              className="h-5 px-1.5 text-[9px] font-mono text-muted-foreground/60 hover:text-sell hover:bg-sell/10 shrink-0"
+              title="Disconnect wallet"
+            >
+              <Unplug className="w-2.5 h-2.5" />
+            </Button>
           </div>
         )}
 
-        {/* On-chain balances */}
+        {/* ── On-chain balances ────────────────────────────────────────────── */}
         {balances && (
           <div className="grid grid-cols-2 gap-1.5">
             {[
-              { label: "WETH",  value: balances.weth.toFixed(5) },
-              { label: "cbBTC", value: balances.cbbtc.toFixed(6) },
+              { label: "WETH",    value: balances.weth.toFixed(5)  },
+              { label: "cbBTC",   value: balances.cbbtc.toFixed(6) },
               { label: "ETH gas", value: balances.ethGas.toFixed(4) },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between px-2 py-1 rounded border border-border/40 bg-background/50">
@@ -122,7 +269,7 @@ export function DexTradingPanel() {
           </div>
         )}
 
-        {/* Enable / disable */}
+        {/* ── Enable / disable ─────────────────────────────────────────────── */}
         {isConfigured && !confirming && (
           <div className="flex items-center justify-between p-2.5 rounded-md bg-background/50 border border-border/40">
             <div>
@@ -136,8 +283,8 @@ export function DexTradingPanel() {
             <Button
               size="sm"
               variant={isEnabled ? "destructive" : "outline"}
-              onClick={handleToggle}
-              disabled={isPending}
+              onClick={() => { if (!isEnabled) setConfirming(true); else setMode({ data: { enabled: false } }); }}
+              disabled={isModeChanging}
               className={cn(
                 "h-6 px-2.5 text-[11px] font-mono",
                 !isEnabled && "border-blue-500/50 text-blue-400 hover:bg-blue-500/10",
@@ -150,7 +297,7 @@ export function DexTradingPanel() {
           </div>
         )}
 
-        {/* Confirmation gate */}
+        {/* ── Confirmation gate ─────────────────────────────────────────────── */}
         {confirming && (
           <div className="flex flex-col gap-2 p-2.5 rounded-md bg-blue-500/10 border border-blue-500/30">
             <div className="flex items-start gap-1.5">
@@ -165,7 +312,7 @@ export function DexTradingPanel() {
               <Button
                 size="sm"
                 onClick={() => setMode({ data: { enabled: true, budgetUsdc: budget } })}
-                disabled={isPending}
+                disabled={isModeChanging}
                 className="h-6 px-2 text-[11px] font-mono bg-blue-600 hover:bg-blue-700 text-white flex-1"
               >
                 Confirm — Go On-Chain
@@ -182,7 +329,7 @@ export function DexTradingPanel() {
           </div>
         )}
 
-        {/* Open positions */}
+        {/* ── Open DEX positions ────────────────────────────────────────────── */}
         {portfolioData && portfolioData.openPositions.length > 0 && (
           <div className="space-y-1">
             <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">Open Positions</p>
@@ -202,7 +349,7 @@ export function DexTradingPanel() {
           </div>
         )}
 
-        {/* Recent DEX trades */}
+        {/* ── Recent DEX trades ─────────────────────────────────────────────── */}
         {portfolioData && portfolioData.trades.length > 0 && (
           <div className="flex-1 overflow-hidden space-y-1 min-h-0">
             <div className="flex items-center justify-between">

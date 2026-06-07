@@ -60,6 +60,12 @@ const SWAP_ROUTER_ABI = [
   },
 ] as const;
 
+// ─── In-memory private key override (set via UI connect form) ─────────────────
+// This overrides DEX_WALLET_PRIVATE_KEY env var for the current server session.
+// It is never logged or persisted to disk. Users should also save to Replit
+// Secrets as DEX_WALLET_PRIVATE_KEY for persistence across restarts.
+let _overrideKey: string | null = null;
+
 // ─── State ─────────────────────────────────────────────────────────────────────
 export interface DexPosition {
   symbol: string;
@@ -91,10 +97,35 @@ const SLIPPAGE = 0.01;
 
 // ─── Client helpers ────────────────────────────────────────────────────────────
 function getAccount() {
-  const raw = process.env.DEX_WALLET_PRIVATE_KEY?.trim();
+  const raw = (_overrideKey ?? process.env.DEX_WALLET_PRIVATE_KEY)?.trim();
   if (!raw) return null;
   const pk = raw.startsWith("0x") ? raw : (`0x${raw}` as `0x${string}`);
   try { return privateKeyToAccount(pk as `0x${string}`); } catch { return null; }
+}
+
+/** Connect a wallet via private key entered in the UI.
+ *  Stores key in memory only — never logged or written to disk.
+ *  Throws if the key is invalid. */
+export function connectPrivateKey(rawKey: string): { address: string } {
+  const trimmed = rawKey.trim();
+  const pk = (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`) as `0x${string}`;
+  const account = privateKeyToAccount(pk); // throws on invalid key
+  _overrideKey = trimmed;
+  _state.configured    = true;
+  _state.walletAddress = account.address;
+  _state.enabled       = false; // require explicit enable after connecting
+  logger.info({ address: account.address }, "DEX wallet connected via UI");
+  return { address: account.address };
+}
+
+/** Disconnect the in-memory wallet (falls back to env var if present). */
+export function disconnectWallet(): void {
+  _overrideKey = null;
+  _state.enabled = false;
+  const fallback = getAccount();
+  _state.configured    = !!fallback;
+  _state.walletAddress = fallback?.address ?? null;
+  logger.info({ fallbackConfigured: _state.configured }, "DEX wallet disconnected");
 }
 
 function clients() {
