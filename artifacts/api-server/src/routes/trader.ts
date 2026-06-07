@@ -608,8 +608,8 @@ router.get("/scaling", (_req, res) => {
 });
 
 router.post("/scaling", (req, res) => {
-  const { enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns } = req.body as Partial<import("../lib/scalingEngine").ScalingConfig>;
-  const updated = scalingEngine.setConfig({ enabled, mode, stopLossPct, takeProfitPct, scaleInEnabled, maxScaleIns });
+  const { enabled, mode, stopLossPct, takeProfitPct, trailingStop, scaleInEnabled, maxScaleIns, autoCompound, compoundFraction } = req.body as Partial<import("../lib/scalingEngine").ScalingConfig>;
+  const updated = scalingEngine.setConfig({ enabled, mode, stopLossPct, takeProfitPct, trailingStop, scaleInEnabled, maxScaleIns, autoCompound, compoundFraction });
   res.json(updated);
 });
 

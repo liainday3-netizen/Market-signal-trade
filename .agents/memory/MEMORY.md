@@ -1,0 +1,1 @@
+- [Paper trader race condition fix](paper-trader-race-fix.md) — FOR UPDATE lock on portfolio row + UNIQUE INDEX on positions.symbol; tx.execute() returns {rows:[]}, not iterable.

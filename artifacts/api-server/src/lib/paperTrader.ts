@@ -40,57 +40,67 @@ async function getOpenPosition(symbol: string) {
 }
 
 export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
-  const portfolio = await ensurePortfolio();
-  const existing = await getOpenPosition(symbol);
   const cfg = scaling.getConfig();
   const multiplier = scaling.calcMultiplier(composite);
   const track = _scaleIns.get(symbol);
 
-  // ── Scale-in path: add to an existing position ─────────────────────────────
-  if (existing) {
-    if (!cfg.scaleInEnabled || !scaling.shouldScaleIn(track?.scaleIns ?? 0, composite, track?.entryComposite ?? 0.15)) {
-      return false;
-    }
+  // ── All logic runs inside a serialised transaction to prevent race conditions.
+  // The FOR UPDATE lock on the portfolio row ensures only one concurrent BUY
+  // per portfolio can proceed at a time, eliminating duplicate-position races.
+  let result = false;
+  await db.transaction(async (tx) => {
+    // Lock portfolio row — serialises concurrent BUY attempts
+    const lockResult = await tx.execute<{ id: number; cash: number }>(
+      `SELECT id, cash FROM portfolio LIMIT 1 FOR UPDATE`,
+    );
+    const portfolio = (lockResult as unknown as { rows: Array<{ id: number; cash: number }> }).rows?.[0];
+    if (!portfolio) return;
 
-    const addAllocation = Math.max(MIN_TRADE_VALUE * 0.5, portfolio.cash * PER_TRADE_CASH_FRACTION * multiplier * 0.5);
-    if (portfolio.cash < addAllocation) return false;
+    // Re-check for existing position inside the lock
+    const [existing] = await tx.select().from(positionsTable).where(eq(positionsTable.symbol, symbol)).limit(1);
 
-    const addQty = addAllocation / price;
-    const newTotalQty = existing.quantity + addQty;
-    const newAvgPrice = ((existing.quantity * existing.avgEntryPrice) + (addQty * price)) / newTotalQty;
-    const newCash = portfolio.cash - addAllocation;
+    // ── Scale-in: add to an existing position ─────────────────────────────
+    if (existing) {
+      if (!cfg.scaleInEnabled || !scaling.shouldScaleIn(track?.scaleIns ?? 0, composite, track?.entryComposite ?? 0.15)) return;
 
-    await db.transaction(async (tx) => {
-      await tx.update(portfolioTable).set({ cash: newCash, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
+      const addAllocation = Math.max(MIN_TRADE_VALUE * 0.5, portfolio.cash * PER_TRADE_CASH_FRACTION * multiplier * 0.5);
+      if (portfolio.cash < addAllocation) return;
+
+      const addQty = addAllocation / price;
+      const newTotalQty = existing.quantity + addQty;
+      const newAvgPrice = ((existing.quantity * existing.avgEntryPrice) + (addQty * price)) / newTotalQty;
+
+      await tx.update(portfolioTable).set({ cash: portfolio.cash - addAllocation, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
       await tx.update(positionsTable).set({ quantity: newTotalQty, avgEntryPrice: newAvgPrice, updatedAt: new Date() }).where(eq(positionsTable.id, existing.id));
       await tx.insert(tradesTable).values({ symbol, side: "SCALE_IN", quantity: addQty, price, value: addAllocation, realizedPnl: null, signalId: signalId ?? null });
-    });
 
-    _scaleIns.set(symbol, { entryComposite: track?.entryComposite ?? composite, scaleIns: (track?.scaleIns ?? 0) + 1 });
-    logger.info({ symbol, addQty, price, addAllocation, scaleIns: (track?.scaleIns ?? 0) + 1 }, "Paper SCALE-IN executed");
-    return true;
-  }
+      _scaleIns.set(symbol, { entryComposite: track?.entryComposite ?? composite, scaleIns: (track?.scaleIns ?? 0) + 1 });
+      logger.info({ symbol, addQty, price, addAllocation }, "Paper SCALE-IN executed");
+      result = true;
+      return;
+    }
 
-  // ── New position ───────────────────────────────────────────────────────────
-  const baseAllocation = Math.max(MIN_TRADE_VALUE, portfolio.cash * PER_TRADE_CASH_FRACTION);
-  const allocation = baseAllocation * multiplier;
-  if (allocation > portfolio.cash || portfolio.cash < MIN_TRADE_VALUE) {
-    logger.warn({ symbol, cash: portfolio.cash }, "Insufficient cash to open position");
-    return false;
-  }
+    // ── New position ───────────────────────────────────────────────────────
+    const baseAllocation = Math.max(MIN_TRADE_VALUE, portfolio.cash * PER_TRADE_CASH_FRACTION);
+    const allocation = baseAllocation * multiplier;
+    if (allocation > portfolio.cash || portfolio.cash < MIN_TRADE_VALUE) {
+      logger.warn({ symbol, cash: portfolio.cash }, "Insufficient cash to open position");
+      return;
+    }
 
-  const quantity = allocation / price;
-  const newCash = portfolio.cash - allocation;
+    const quantity = allocation / price;
 
-  await db.transaction(async (tx) => {
-    await tx.update(portfolioTable).set({ cash: newCash, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
-    await tx.insert(positionsTable).values({ symbol, quantity, avgEntryPrice: price });
+    await tx.update(portfolioTable).set({ cash: portfolio.cash - allocation, updatedAt: new Date() }).where(eq(portfolioTable.id, portfolio.id));
+    // ON CONFLICT DO NOTHING — DB unique index is the last line of defence
+    await tx.insert(positionsTable).values({ symbol, quantity, avgEntryPrice: price }).onConflictDoNothing();
     await tx.insert(tradesTable).values({ symbol, side: "BUY", quantity, price, value: allocation, realizedPnl: null, signalId: signalId ?? null });
+
+    _scaleIns.set(symbol, { entryComposite: composite, scaleIns: 0 });
+    logger.info({ symbol, quantity, price, allocation, multiplier }, "Paper BUY executed");
+    result = true;
   });
 
-  _scaleIns.set(symbol, { entryComposite: composite, scaleIns: 0 });
-  logger.info({ symbol, quantity, price, allocation, multiplier }, "Paper BUY executed");
-  return true;
+  return result;
 }
 
 export async function executeSell(symbol: string, price: number, signalId?: number): Promise<boolean> {

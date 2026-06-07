@@ -1,4 +1,4 @@
-import { pgTable, serial, text, real, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, timestamp, integer, unique } from "drizzle-orm/pg-core";
 
 export const portfolioTable = pgTable("portfolio", {
   id: serial("id").primaryKey(),
@@ -8,6 +8,7 @@ export const portfolioTable = pgTable("portfolio", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// unique("positions_symbol_unique") prevents duplicate open positions per symbol
 export const positionsTable = pgTable("positions", {
   id: serial("id").primaryKey(),
   symbol: text("symbol").notNull(),
@@ -15,7 +16,7 @@ export const positionsTable = pgTable("positions", {
   avgEntryPrice: real("avg_entry_price").notNull(),
   openedAt: timestamp("opened_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => [unique("positions_symbol_unique").on(t.symbol)]);
 
 export const tradesTable = pgTable("trades", {
   id: serial("id").primaryKey(),
