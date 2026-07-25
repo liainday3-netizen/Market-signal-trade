@@ -597,7 +597,7 @@ router.get("/exchange/diagnose", async (req, res) => {
 // ─── DEX Trading Routes (Base chain / Uniswap v3) ────────────────────────────
 
 // ── Connect / disconnect wallet via UI ────────────────────────────────────────
-router.post("/dex-wallet", (req, res) => {
+router.post("/dex-wallet", async (req, res) => {
   const { privateKey } = req.body as { privateKey?: string };
   if (!privateKey || typeof privateKey !== "string" || !privateKey.trim()) {
     res.status(400).json({ error: "privateKey is required" });
@@ -605,7 +605,13 @@ router.post("/dex-wallet", (req, res) => {
   }
   try {
     const result = dexTrader.connectPrivateKey(privateKey);
-    res.json({ address: result.address, configured: true });
+    // Auto-enable DEX trading once wallet is connected
+    dexTrader.setEnabled(true);
+    // Persist enabled state so it survives restarts (key itself stays memory-only)
+    await db.insert(settingsTable)
+      .values({ key: "dex.enabled", value: "true" })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value: "true" } });
+    res.json({ address: result.address, configured: true, enabled: true });
   } catch {
     res.status(400).json({ error: "Invalid private key — must be a 32-byte hex string (with or without 0x prefix)" });
   }
@@ -621,11 +627,16 @@ router.get("/dex-mode", (_req, res) => {
   res.json(dexTrader.getState());
 });
 
-router.post("/dex-mode", (req, res) => {
+router.post("/dex-mode", async (req, res) => {
   const { enabled, budgetUsdc } = req.body as { enabled?: boolean; budgetUsdc?: number };
   try {
     if (typeof budgetUsdc === "number") dexTrader.setBudget(budgetUsdc);
-    if (typeof enabled === "boolean") dexTrader.setEnabled(enabled);
+    if (typeof enabled === "boolean") {
+      dexTrader.setEnabled(enabled);
+      await db.insert(settingsTable)
+        .values({ key: "dex.enabled", value: String(enabled) })
+        .onConflictDoUpdate({ target: settingsTable.key, set: { value: String(enabled) } });
+    }
     res.json(dexTrader.getState());
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Unknown error" });
