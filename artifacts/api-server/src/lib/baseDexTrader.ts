@@ -72,6 +72,13 @@ const SWAP_ROUTER_ABI = [
 // Secrets as DEX_WALLET_PRIVATE_KEY for persistence across restarts.
 let _overrideKey: string | null = null;
 
+// Last known ETH price — updated by autoTrader when processing ETH/USDT candles
+let _lastEthPrice = 0;
+export function updateEthPrice(price: number): void { _lastEthPrice = price; }
+
+// Guard: only one auto-refill at a time
+let _refilling = false;
+
 // ─── State ─────────────────────────────────────────────────────────────────────
 export interface DexPosition {
   symbol: string;
@@ -250,7 +257,10 @@ const MIN_USDC_TO_TRADE   = 3;   // below this, attempt a refill before buying
 const REFILL_TARGET_USDC  = 15;  // try to top up to this amount
 const GAS_RESERVE_ETH     = 0.003; // always leave this much ETH for gas (~$6-10)
 
-async function autoRefillUsdc(ethPriceUsd: number): Promise<void> {
+async function autoRefillUsdc(): Promise<void> {
+  if (_refilling) return; // already in progress
+  if (_lastEthPrice <= 0) return; // ETH price not yet known — skip
+
   const c = clients();
   if (!c) return;
 
@@ -261,8 +271,8 @@ async function autoRefillUsdc(ethPriceUsd: number): Promise<void> {
 
   if (usdcBalance >= MIN_USDC_TO_TRADE) return; // enough USDC — nothing to do
 
-  const ethRaw  = await c.pub.getBalance({ address: c.account.address });
-  const ethBal  = parseFloat(formatUnits(ethRaw, 18));
+  const ethRaw   = await c.pub.getBalance({ address: c.account.address });
+  const ethBal   = parseFloat(formatUnits(ethRaw, 18));
   const ethAvail = Math.max(0, ethBal - GAS_RESERVE_ETH);
 
   if (ethAvail <= 0) {
@@ -270,14 +280,17 @@ async function autoRefillUsdc(ethPriceUsd: number): Promise<void> {
     return;
   }
 
-  // Swap just enough ETH to hit the refill target (or all available ETH, whichever is less)
+  // Use tracked ETH price (always correct regardless of which signal triggered the BUY)
+  const ethPrice    = _lastEthPrice;
   const usdcNeeded  = REFILL_TARGET_USDC - usdcBalance;
-  const ethToSwap   = Math.min(ethAvail, usdcNeeded / ethPriceUsd);
-  const amountIn    = parseUnits(ethToSwap.toFixed(18), 18);
-  const expectedOut = ethToSwap * ethPriceUsd;
+  const ethToSwap   = Math.min(ethAvail, usdcNeeded / ethPrice);
+  // Use 9 decimal places to avoid float precision issues with parseUnits
+  const amountIn    = parseUnits(ethToSwap.toFixed(9), 18);
+  const expectedOut = ethToSwap * ethPrice;
   const amountOutMin = parseUnits((expectedOut * (1 - SLIPPAGE)).toFixed(TOKEN_DECIMALS.USDC), TOKEN_DECIMALS.USDC);
 
-  logger.info({ ethToSwap, expectedUsdc: expectedOut, currentUsdc: usdcBalance }, "DEX auto-refill: wrapping ETH → USDC");
+  _refilling = true;
+  logger.info({ ethToSwap, expectedUsdc: expectedOut, currentUsdc: usdcBalance, ethPrice }, "DEX auto-refill: wrapping ETH → USDC");
 
   try {
     // Step 1: wrap native ETH → WETH via deposit()
@@ -297,6 +310,8 @@ async function autoRefillUsdc(ethPriceUsd: number): Promise<void> {
     logger.info({ swapHash, expectedUsdc: expectedOut }, "DEX auto-refill: WETH swapped to USDC");
   } catch (err) {
     logger.error({ err }, "DEX auto-refill failed (non-fatal — will proceed with available USDC)");
+  } finally {
+    _refilling = false;
   }
 }
 
@@ -314,7 +329,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
   if (!c) return false;
 
   // Auto-refill USDC from ETH if balance is too low before attempting the trade
-  await autoRefillUsdc(price);
+  await autoRefillUsdc();
 
   const usdcRaw = await c.pub.readContract({
     address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],

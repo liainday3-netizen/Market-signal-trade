@@ -153,10 +153,15 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   }).returning({ id: signalsTable.id });
 
   setLastPrice(symbol, price);
+
+  // Keep DEX auto-refill calibrated with the real ETH price
+  if (symbol === "ETH/USDT") dexTrader.updateEthPrice(price);
+
   const composite = factors.composite;
 
   // ── SL/TP check (runs before new signals, using current candle close price) ─
   let paperSlTpFired = false;
+  let dexSlTpFired   = false;
   try {
     const sltp = await checkSlTp(symbol, price);
     if (sltp) {
@@ -168,8 +173,13 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   }
   // Live SL/TP
   try { liveTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
-  // DEX SL/TP
-  try { dexTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
+  // DEX SL/TP — track whether it fired so signal-SELL doesn't double-execute
+  try {
+    const dexPosBefore = dexTrader.getState().positions[symbol];
+    dexTrader.checkSlTp(symbol, price);
+    const dexPosAfter = dexTrader.getState().positions[symbol];
+    if (dexPosBefore && !dexPosAfter) dexSlTpFired = true;
+  } catch (_) { /* noop */ }
 
   // ── Paper trades ──────────────────────────────────────────────────────────
   // Skip signal-based SELL if SL/TP already closed the position this tick
@@ -189,9 +199,10 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   }
 
   // ── DEX trades on Base chain ──────────────────────────────────────────────
+  // Skip signal-SELL if SL/TP already closed the DEX position this tick
   try {
     if (signal === "BUY") await dexTrader.executeBuy(symbol, price, insertedSignal?.id, composite);
-    else if (signal === "SELL") await dexTrader.executeSell(symbol, price, insertedSignal?.id);
+    else if (signal === "SELL" && !dexSlTpFired) await dexTrader.executeSell(symbol, price, insertedSignal?.id);
   } catch (err) {
     logger.error({ err, symbol, signal }, "DEX trade failed");
   }
