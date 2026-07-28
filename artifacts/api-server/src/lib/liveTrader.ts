@@ -1,4 +1,6 @@
-import { db, tradesTable, livePositionsTable, settingsTable } from "@workspace/db";
+import { db, tradesTable, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
 import { eq, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import * as exchange from "./coinbaseExchange";
