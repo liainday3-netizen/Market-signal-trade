@@ -39,6 +39,12 @@ const ERC20_ABI = [
   { name: "approve",    type: "function", stateMutability: "nonpayable",  inputs: [{ name: "spender", type: "address" }, { name: "amount",  type: "uint256" }], outputs: [{ type: "bool"    }] },
 ] as const;
 
+// WETH deposit (wrap native ETH → WETH)
+const WETH_ABI = [
+  { name: "deposit",   type: "function", stateMutability: "payable",     inputs: [],                                                                           outputs: []                    },
+  { name: "balanceOf", type: "function", stateMutability: "view",        inputs: [{ name: "account", type: "address" }],                                      outputs: [{ type: "uint256" }] },
+] as const;
+
 const SWAP_ROUTER_ABI = [
   {
     name: "exactInputSingle",
@@ -239,6 +245,61 @@ async function swap(
   return hash;
 }
 
+// ─── Auto-refill: swap ETH → USDC when balance is too low to trade ────────────
+const MIN_USDC_TO_TRADE   = 3;   // below this, attempt a refill before buying
+const REFILL_TARGET_USDC  = 15;  // try to top up to this amount
+const GAS_RESERVE_ETH     = 0.003; // always leave this much ETH for gas (~$6-10)
+
+async function autoRefillUsdc(ethPriceUsd: number): Promise<void> {
+  const c = clients();
+  if (!c) return;
+
+  const usdcRaw = await c.pub.readContract({
+    address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],
+  }) as bigint;
+  const usdcBalance = parseFloat(formatUnits(usdcRaw, TOKEN_DECIMALS.USDC));
+
+  if (usdcBalance >= MIN_USDC_TO_TRADE) return; // enough USDC — nothing to do
+
+  const ethRaw  = await c.pub.getBalance({ address: c.account.address });
+  const ethBal  = parseFloat(formatUnits(ethRaw, 18));
+  const ethAvail = Math.max(0, ethBal - GAS_RESERVE_ETH);
+
+  if (ethAvail <= 0) {
+    logger.warn({ ethBal, usdcBalance }, "DEX auto-refill: not enough ETH above gas reserve");
+    return;
+  }
+
+  // Swap just enough ETH to hit the refill target (or all available ETH, whichever is less)
+  const usdcNeeded  = REFILL_TARGET_USDC - usdcBalance;
+  const ethToSwap   = Math.min(ethAvail, usdcNeeded / ethPriceUsd);
+  const amountIn    = parseUnits(ethToSwap.toFixed(18), 18);
+  const expectedOut = ethToSwap * ethPriceUsd;
+  const amountOutMin = parseUnits((expectedOut * (1 - SLIPPAGE)).toFixed(TOKEN_DECIMALS.USDC), TOKEN_DECIMALS.USDC);
+
+  logger.info({ ethToSwap, expectedUsdc: expectedOut, currentUsdc: usdcBalance }, "DEX auto-refill: wrapping ETH → USDC");
+
+  try {
+    // Step 1: wrap native ETH → WETH via deposit()
+    const wrapHash = await (c.wal as any).writeContract({
+      chain: base,
+      address: TOKENS.WETH,
+      abi: WETH_ABI,
+      functionName: "deposit",
+      value: amountIn,
+    }) as `0x${string}`;
+    await (c.pub as any).waitForTransactionReceipt({ hash: wrapHash });
+    logger.info({ wrapHash, ethToSwap }, "DEX auto-refill: ETH wrapped to WETH");
+
+    // Step 2: approve + swap WETH → USDC
+    await ensureApproval(c.pub, c.wal, TOKENS.WETH, c.account.address, amountIn);
+    const swapHash = await swap(TOKENS.WETH, TOKENS.USDC, 500, amountIn, amountOutMin);
+    logger.info({ swapHash, expectedUsdc: expectedOut }, "DEX auto-refill: WETH swapped to USDC");
+  } catch (err) {
+    logger.error({ err }, "DEX auto-refill failed (non-fatal — will proceed with available USDC)");
+  }
+}
+
 // ─── BUY ──────────────────────────────────────────────────────────────────────
 export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   if (!_state.enabled || !_state.configured) return false;
@@ -251,6 +312,9 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
 
   const c = clients();
   if (!c) return false;
+
+  // Auto-refill USDC from ETH if balance is too low before attempting the trade
+  await autoRefillUsdc(price);
 
   const usdcRaw = await c.pub.readContract({
     address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],

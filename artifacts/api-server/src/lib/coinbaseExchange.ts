@@ -61,10 +61,20 @@ export function getExchange(): AnyExchange {
     apiKey: cleanKey,
     secret: cleanSecret,
     enableRateLimit: true,
-    options: { defaultType: "spot" },
+    options: {
+      defaultType: "spot",
+      // Skip the slow /v2/currencies/crypto endpoint that times out in production
+      fetchCurrencies: false,
+    },
   });
 
   logger.info("Coinbase Advanced Trade exchange initialised");
+
+  // Pre-warm markets in the background so the first trade call doesn't block
+  _exchange.loadMarkets().catch((err: unknown) => {
+    logger.warn({ err }, "Coinbase: market pre-warm failed (non-fatal, will retry on first trade)");
+  });
+
   return _exchange;
 }
 
