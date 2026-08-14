@@ -78,6 +78,7 @@ export function updateEthPrice(price: number): void { _lastEthPrice = price; }
 
 // Guard: only one auto-refill at a time
 let _refilling = false;
+const _scaleIns = new Map<string, { entryComposite: number; scaleIns: number }>();
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 export interface DexPosition {
@@ -320,8 +321,12 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
   if (!_state.enabled || !_state.configured) return false;
   if (!SYMBOL_MAP[symbol]) return false; // SOL not on Base
 
-  if (_state.positions[symbol]) {
-    logger.info({ symbol }, "DEX: already have open position, skipping BUY");
+  const existing = _state.positions[symbol];
+  const track = _scaleIns.get(symbol);
+  const multiplier = scaling.calcMultiplier(composite);
+  const scalingIn = Boolean(existing);
+  if (scalingIn && !scaling.shouldScaleIn(track?.scaleIns ?? 0, composite, track?.entryComposite ?? 0.15)) {
+    logger.info({ symbol, composite }, "DEX: scale-in skipped — signal not stronger than entry");
     return false;
   }
 
@@ -335,8 +340,9 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],
   }) as bigint;
   const usdcBalance = parseFloat(formatUnits(usdcRaw, TOKEN_DECIMALS.USDC));
-  const multiplier = scaling.calcMultiplier(composite);
-  const spendUsdc = Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier;
+  const spendUsdc = scalingIn
+    ? Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier * 0.5
+    : Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier;
 
   if (spendUsdc < 1) {
     logger.warn({ symbol, usdcBalance }, "DEX: insufficient USDC to BUY");
@@ -352,12 +358,30 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
   try {
     const hash = await swap(TOKENS.USDC, token, fee, amountIn, amountOutMin);
     _state.totalTrades++;
+    if (existing) {
+      const totalQty = existing.quantity + expectedOut;
+      const avgPrice = ((existing.quantity * existing.avgEntryPrice) + (expectedOut * price)) / totalQty;
+      _state.positions[symbol] = { ...existing, quantity: totalQty, avgEntryPrice: avgPrice };
+      _scaleIns.set(symbol, {
+        entryComposite: track?.entryComposite ?? composite,
+        scaleIns: (track?.scaleIns ?? 0) + 1,
+      });
+      await db.insert(tradesTable).values({
+        symbol, side: "DEX_SCALE_IN", price,
+        quantity: expectedOut, value: spendUsdc,
+        realizedPnl: null, signalId: signalId ?? null,
+      });
+      logger.info({ symbol, expectedOut, spendUsdc, price, hash }, "DEX SCALE-IN executed");
+      return true;
+    }
+
     _state.positions[symbol] = {
       symbol,
       quantity: expectedOut,
       avgEntryPrice: price,
       openedAt: new Date().toISOString(),
     };
+    _scaleIns.set(symbol, { entryComposite: composite, scaleIns: 0 });
 
     await db.insert(tradesTable).values({
       symbol, side: "DEX_BUY", price,
@@ -412,6 +436,7 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
     _state.totalTrades++;
     delete _state.positions[symbol];
     _hwDex.delete(symbol);
+    _scaleIns.delete(symbol);
 
     // Auto-compound: grow budget by fraction of realized profit
     const compound = scaling.compoundAmount(realizedPnl);

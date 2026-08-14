@@ -1,1 +1,2 @@
 - [Paper trader race condition fix](paper-trader-race-fix.md) — FOR UPDATE lock on portfolio row + UNIQUE INDEX on positions.symbol; tx.execute() returns {rows:[]}, not iterable.
+- [Real-trade scaling safety](real-trade-scaling-safety.md) — live and DEX scale-ins stay disabled by default and require stronger signals plus capped additions.

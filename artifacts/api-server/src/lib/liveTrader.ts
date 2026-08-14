@@ -1,6 +1,4 @@
-import { db, tradesTable, settingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-
+import { db, tradesTable, livePositionsTable, settingsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import * as exchange from "./coinbaseExchange";
@@ -34,6 +32,7 @@ const state: LiveTraderState = {
 // Per-symbol trailing high-water mark and cooldown tracking
 const _hwLive    = new Map<string, number>();
 const _cooldowns = new Map<string, number>();
+const _scaleIns  = new Map<string, { entryComposite: number; scaleIns: number }>();
 
 // ─── Settings persistence helpers ─────────────────────────────────────────────
 async function saveSetting(key: string, value: unknown): Promise<void> {
@@ -128,10 +127,9 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     return false;
   }
 
-  if (state.positions[symbol]) {
-    logger.info({ symbol }, "Live: already have open position, skipping BUY");
-    return false;
-  }
+  const existing = state.positions[symbol];
+  const track = _scaleIns.get(symbol);
+  const multiplier = scaling.calcMultiplier(composite);
 
   let freeUsdc: number;
   try {
@@ -141,13 +139,19 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     return false;
   }
 
-  const multiplier = scaling.calcMultiplier(composite);
-  const allocation = Math.min(
-    Math.max(MIN_TRADE_USDC, freeUsdc * PER_TRADE_FRACTION) * multiplier,
-    state.budgetUsdc,
-  );
+  const scalingIn = Boolean(existing);
+  if (scalingIn && !scaling.shouldScaleIn(track?.scaleIns ?? 0, composite, track?.entryComposite ?? 0.15)) {
+    logger.info({ symbol, composite }, "Live: scale-in skipped — signal not stronger than entry");
+    return false;
+  }
+  const allocation = scalingIn
+    ? Math.min(state.budgetUsdc, freeUsdc * PER_TRADE_FRACTION * multiplier * 0.5)
+    : Math.min(
+        Math.max(MIN_TRADE_USDC, freeUsdc * PER_TRADE_FRACTION) * multiplier,
+        state.budgetUsdc,
+      );
 
-  if (freeUsdc < allocation || freeUsdc < MIN_TRADE_USDC) {
+  if (allocation < MIN_TRADE_USDC || freeUsdc < allocation || freeUsdc < MIN_TRADE_USDC) {
     logger.warn({ symbol, freeUsdc, allocation }, "Live: insufficient USD balance");
     return false;
   }
@@ -157,7 +161,25 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     const fillPrice = order.price  > 0 ? order.price  : price;
     const qty       = order.filled > 0 ? order.filled : allocation / fillPrice;
 
+    if (existing) {
+      const totalQty = existing.quantity + qty;
+      const avgPrice = ((existing.quantity * existing.avgEntryPrice) + (qty * fillPrice)) / totalQty;
+      state.positions[symbol] = { ...existing, quantity: totalQty, avgEntryPrice: avgPrice };
+      _scaleIns.set(symbol, {
+        entryComposite: track?.entryComposite ?? composite,
+        scaleIns: (track?.scaleIns ?? 0) + 1,
+      });
+      await upsertLivePosition(symbol, totalQty, avgPrice, _hwLive.get(symbol) ?? avgPrice);
+      await db.insert(tradesTable).values({
+        symbol, side: "LIVE_SCALE_IN", quantity: qty, price: fillPrice,
+        value: allocation, realizedPnl: null, signalId: signalId ?? null,
+      });
+      logger.info({ symbol, qty, fillPrice, allocation }, "Live SCALE-IN executed");
+      return true;
+    }
+
     state.positions[symbol] = { symbol, quantity: qty, avgEntryPrice: fillPrice, openedAt: new Date().toISOString() };
+    _scaleIns.set(symbol, { entryComposite: composite, scaleIns: 0 });
     _hwLive.set(symbol, fillPrice);
 
     // Persist to DB so restarts don't lose the open position
@@ -190,6 +212,7 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
 
     delete state.positions[symbol];
     _hwLive.delete(symbol);
+    _scaleIns.delete(symbol);
     _cooldowns.set(symbol, Date.now()); // start cooldown timer
 
     // Remove position from DB

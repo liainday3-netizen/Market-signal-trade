@@ -30,7 +30,21 @@ let _cfg: ScalingConfig = { ...DEFAULTS };
 export function getConfig(): ScalingConfig { return { ..._cfg }; }
 
 export function setConfig(patch: Partial<ScalingConfig>): ScalingConfig {
-  _cfg = { ..._cfg, ...patch };
+  const mode = patch.mode === "fixed" || patch.mode === "tiered" || patch.mode === "linear"
+    ? patch.mode
+    : undefined;
+  _cfg = {
+    ..._cfg,
+    ...(typeof patch.enabled === "boolean" ? { enabled: patch.enabled } : {}),
+    ...(mode ? { mode } : {}),
+    ...(typeof patch.stopLossPct === "number" ? { stopLossPct: Math.max(0, Math.min(50, patch.stopLossPct)) } : {}),
+    ...(typeof patch.takeProfitPct === "number" ? { takeProfitPct: Math.max(0, Math.min(200, patch.takeProfitPct)) } : {}),
+    ...(typeof patch.trailingStop === "boolean" ? { trailingStop: patch.trailingStop } : {}),
+    ...(typeof patch.scaleInEnabled === "boolean" ? { scaleInEnabled: patch.scaleInEnabled } : {}),
+    ...(typeof patch.maxScaleIns === "number" ? { maxScaleIns: Math.max(1, Math.min(3, Math.floor(patch.maxScaleIns))) } : {}),
+    ...(typeof patch.autoCompound === "boolean" ? { autoCompound: patch.autoCompound } : {}),
+    ...(typeof patch.compoundFraction === "number" ? { compoundFraction: Math.max(0, Math.min(1, patch.compoundFraction)) } : {}),
+  };
   return { ..._cfg };
 }
 
@@ -94,7 +108,8 @@ export function shouldScaleIn(
   newComposite: number,
   entryComposite: number,
 ): boolean {
-  if (!_cfg.scaleInEnabled) return false;
+  if (!_cfg.scaleInEnabled || !Number.isFinite(newComposite) || !Number.isFinite(entryComposite)) return false;
   if (existingScaleIns >= _cfg.maxScaleIns) return false;
-  return Math.abs(newComposite) >= Math.abs(entryComposite) * 1.20;
+  const baseline = Math.max(Math.abs(entryComposite), 0.15);
+  return Math.abs(newComposite) >= baseline * 1.20;
 }
