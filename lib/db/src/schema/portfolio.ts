@@ -29,6 +29,8 @@ export const tradesTable = pgTable("trades", {
   value: real("value").notNull(),
   realizedPnl: real("realized_pnl"),
   signalId: integer("signal_id"),
+  executionId: text("execution_id"),
+  txHash: text("tx_hash"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

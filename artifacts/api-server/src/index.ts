@@ -31,6 +31,8 @@ async function ensureTables(): Promise<void> {
         updated_at       TIMESTAMP DEFAULT NOW() NOT NULL,
         CONSTRAINT live_positions_symbol_unique UNIQUE (symbol)
       );
+      ALTER TABLE trades ADD COLUMN IF NOT EXISTS execution_id TEXT;
+      ALTER TABLE trades ADD COLUMN IF NOT EXISTS tx_hash TEXT;
     `);
     logger.info("Persistence tables verified");
   } catch (err) {

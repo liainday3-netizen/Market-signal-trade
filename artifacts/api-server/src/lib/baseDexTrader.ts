@@ -370,6 +370,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
         symbol, side: "DEX_SCALE_IN", price,
         quantity: expectedOut, value: spendUsdc,
         realizedPnl: null, signalId: signalId ?? null,
+        txHash: hash,
       });
       logger.info({ symbol, expectedOut, spendUsdc, price, hash }, "DEX SCALE-IN executed");
       return true;
@@ -387,6 +388,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
       symbol, side: "DEX_BUY", price,
       quantity: expectedOut, value: spendUsdc,
       realizedPnl: null, signalId: signalId ?? null,
+      txHash: hash,
     });
 
     logger.info({ symbol, spendUsdc, price, hash }, "DEX BUY executed");
@@ -449,6 +451,7 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
       symbol, side: "DEX_SELL", price,
       quantity: tokenBalance, value: expectedUsdc,
       realizedPnl, signalId: signalId ?? null,
+      txHash: hash,
     });
 
     logger.info({ symbol, tokenBalance, price, realizedPnl, hash }, "DEX SELL executed");

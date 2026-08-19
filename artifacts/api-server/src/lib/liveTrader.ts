@@ -173,6 +173,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
       await db.insert(tradesTable).values({
         symbol, side: "LIVE_SCALE_IN", quantity: qty, price: fillPrice,
         value: allocation, realizedPnl: null, signalId: signalId ?? null,
+        executionId: order.id,
       });
       logger.info({ symbol, qty, fillPrice, allocation }, "Live SCALE-IN executed");
       return true;
@@ -188,6 +189,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     await db.insert(tradesTable).values({
       symbol, side: "LIVE_BUY", quantity: qty, price: fillPrice,
       value: allocation, realizedPnl: null, signalId: signalId ?? null,
+      executionId: order.id,
     });
 
     logger.info({ symbol, qty, fillPrice, allocation, orderId: order.id }, "Live BUY executed");
@@ -231,6 +233,7 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
       quantity: position.quantity, price: fillPrice,
       value: proceeds, realizedPnl,
       signalId: signalId ?? null,
+      executionId: order.id,
     });
 
     logger.info({ symbol, qty: position.quantity, fillPrice, realizedPnl, orderId: order.id }, "Live SELL executed");
