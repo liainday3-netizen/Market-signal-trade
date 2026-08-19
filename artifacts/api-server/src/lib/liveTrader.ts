@@ -297,6 +297,8 @@ export async function getLivePortfolio() {
       id: t.id, symbol: t.symbol, side: t.side,
       quantity: t.quantity, price: t.price, value: t.value,
       realizedPnl: t.realizedPnl,
+      executionId: t.executionId,
+      txHash: t.txHash,
       timestamp: t.createdAt.toISOString(),
     })),
     totalTrades: liveOnly.length, closedTrades: sells.length,

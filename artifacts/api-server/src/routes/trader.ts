@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, signalsTable, settingsTable } from "@workspace/db";
+import { db, signalsTable, settingsTable, tradesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import * as autoTrader from "../lib/autoTrader";
 import * as paperTrader from "../lib/paperTrader";
@@ -539,6 +539,38 @@ router.get("/live-portfolio", async (req, res) => {
     res.json(portfolio);
   } catch (err) {
     req.log.error({ err }, "Error fetching live portfolio");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// Read-only execution proof audit. Paper trades are intentionally excluded.
+router.get("/audit", async (req, res) => {
+  try {
+    const trades = await db.select().from(tradesTable).orderBy(desc(tradesTable.createdAt));
+    const realTrades = trades.filter((t) => t.side.startsWith("LIVE_") || t.side.startsWith("DEX_"));
+    const verifiedRefs = realTrades.filter((t) =>
+      t.side.startsWith("LIVE_") ? Boolean(t.executionId) : Boolean(t.txHash),
+    );
+    res.json({
+      totalRecordedTrades: trades.length,
+      paperTrades: trades.filter((t) => !t.side.startsWith("LIVE_") && !t.side.startsWith("DEX_")).length,
+      realTrades: realTrades.length,
+      tradesWithExecutionProof: verifiedRefs.length,
+      unverifiedRealTrades: realTrades.length - verifiedRefs.length,
+      records: realTrades.slice(0, 100).map((t) => ({
+        id: t.id,
+        symbol: t.symbol,
+        side: t.side,
+        quantity: t.quantity,
+        price: t.price,
+        value: t.value,
+        executionId: t.executionId,
+        txHash: t.txHash,
+        timestamp: t.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error auditing trade execution proof");
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
 });

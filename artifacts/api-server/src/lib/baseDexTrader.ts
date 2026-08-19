@@ -416,18 +416,22 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
   const { token, key, fee } = SYMBOL_MAP[symbol]!;
   const decimals = TOKEN_DECIMALS[key];
 
-  const tokenRaw = await c.pub.readContract({
+   const walletTokenRaw = await c.pub.readContract({
     address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],
   }) as bigint;
-  const tokenBalance = parseFloat(formatUnits(tokenRaw, decimals));
+   const walletTokenBalance = parseFloat(formatUnits(walletTokenRaw, decimals));
 
-  if (tokenBalance < 1e-8) {
+   if (walletTokenBalance < 1e-8) {
     logger.warn({ symbol }, "DEX: on-chain token balance is zero, clearing position");
     delete _state.positions[symbol];
     return false;
   }
 
-  const expectedUsdc = tokenBalance * price;
+   // Sell only the quantity tracked by this bot. Never liquidate unrelated
+   // tokens already held in the wallet.
+   const trackedQuantity = Math.min(position.quantity, walletTokenBalance);
+   const tokenRaw = parseUnits(trackedQuantity.toFixed(decimals), decimals);
+   const expectedUsdc = trackedQuantity * price;
   const amountOutMin = parseUnits((expectedUsdc * (1 - SLIPPAGE)).toFixed(TOKEN_DECIMALS.USDC), TOKEN_DECIMALS.USDC);
 
   try {
@@ -449,12 +453,12 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
 
     await db.insert(tradesTable).values({
       symbol, side: "DEX_SELL", price,
-      quantity: tokenBalance, value: expectedUsdc,
+      quantity: trackedQuantity, value: expectedUsdc,
       realizedPnl, signalId: signalId ?? null,
       txHash: hash,
     });
 
-    logger.info({ symbol, tokenBalance, price, realizedPnl, hash }, "DEX SELL executed");
+     logger.info({ symbol, trackedQuantity, price, realizedPnl, hash }, "DEX SELL executed");
     return true;
   } catch (err) {
     logger.error({ err, symbol }, "DEX SELL failed");
@@ -513,8 +517,10 @@ export async function getDexPortfolio() {
       quantity:    t.quantity,
       price:       t.price,
       value:       t.value,
-      realizedPnl: t.realizedPnl,
-      timestamp:   t.createdAt.toISOString(),
+       realizedPnl: t.realizedPnl,
+       executionId: t.executionId,
+       txHash:      t.txHash,
+       timestamp:   t.createdAt.toISOString(),
     })),
     totalTrades: dexOnly.length,
     closedTrades: sells.length,
