@@ -10,6 +10,7 @@ import * as scalingEngine from "../lib/scalingEngine";
 import { wsEvents } from "../lib/binanceWs";
 import type { LiveTicker } from "../lib/binanceWs";
 import type { ScalingConfig } from "../lib/scalingEngine";
+import { applyCoherence, calculateCoherence, type TimeframeFactorSnapshot } from "../lib/coherence";
 
 async function persistScalingConfig(cfg: ScalingConfig): Promise<void> {
   await db.insert(settingsTable)
@@ -320,16 +321,14 @@ function computeFactorScores(features: Features): FactorScores {
   };
 }
 
-function signalFromFactors(factors: FactorScores): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
+function signalFromFactors(
+  factors: FactorScores,
+  coherence?: ReturnType<typeof calculateCoherence>,
+): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
+  if (coherence) return applyCoherence(factors, coherence, 0.15);
   const score = factors.composite;
-  // Map [-1, +1] to probability [0, 1]
   const confidence = Math.round((score + 1) / 2 * 1000) / 1000;
-
-  let signal: "BUY" | "SELL" | "HOLD";
-  if (score > 0.15) signal = "BUY";
-  else if (score < -0.15) signal = "SELL";
-  else signal = "HOLD";
-
+  const signal: "BUY" | "SELL" | "HOLD" = score > 0.15 ? "BUY" : score < -0.15 ? "SELL" : "HOLD";
   return { signal, confidence };
 }
 
@@ -402,7 +401,20 @@ router.get("/signal", async (req, res) => {
 
     const { price, ...features } = computeFeatures(candles);
     const factorScores = computeFactorScores(features);
-    const { signal, confidence } = signalFromFactors(factorScores);
+    const coherenceCandles = await Promise.all(
+      (["1m", "5m", "15m"] as const).map(async (coherenceTimeframe) => ({
+        timeframe: coherenceTimeframe,
+        candles: coherenceTimeframe === timeframe ? candles : await fetchOHLCV(symbol, coherenceTimeframe, 100),
+      })),
+    );
+    const timeframeSnapshots: TimeframeFactorSnapshot[] = coherenceCandles
+      .filter(({ candles }) => candles.length >= 35)
+      .map(({ timeframe: coherenceTimeframe, candles: timeframeCandles }) => ({
+        timeframe: coherenceTimeframe,
+        factors: computeFactorScores(computeFeatures(timeframeCandles)),
+      }));
+    const coherence = calculateCoherence(factorScores, timeframeSnapshots, 0.15);
+    const { signal, confidence } = signalFromFactors(factorScores, coherence);
     const backtest = runBacktest(candles);
 
     const record = {
@@ -429,6 +441,7 @@ router.get("/signal", async (req, res) => {
       timestamp: new Date().toISOString(),
       features,
       factorScores,
+      coherence,
       backtest,
     });
   } catch (err) {

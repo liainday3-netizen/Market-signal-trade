@@ -52,14 +52,44 @@ export const GetSignalResponse = zod.object({
     zScore: zod.number(),
     volumeTrend: zod.number(),
   }),
-  factorScores: zod.object({
-    trend: zod.number(),
-    momentum: zod.number(),
-    meanReversion: zod.number(),
-    volatility: zod.number(),
-    volume: zod.number(),
-    composite: zod.number(),
-  }),
+  factorScores: zod
+    .object({
+      trend: zod.number(),
+      momentum: zod.number(),
+      meanReversion: zod.number(),
+      volatility: zod.number(),
+      volume: zod.number(),
+      composite: zod.number(),
+    })
+    .optional(),
+  coherence: zod
+    .object({
+      score: zod.number().describe("Combined coherence score from 0 to 1."),
+      indicatorAgreement: zod
+        .number()
+        .describe(
+          "Agreement among trend, momentum, mean reversion, volatility, and volume from 0 to 1.",
+        ),
+      timeframeAgreement: zod
+        .number()
+        .describe(
+          "Share of required timeframes aligned with the proposed direction from 0 to 1.",
+        ),
+      isCoherent: zod.boolean(),
+      reason: zod.string(),
+      direction: zod.enum(["BUY", "SELL", "HOLD"]),
+      timeframes: zod.array(
+        zod.object({
+          timeframe: zod.string(),
+          direction: zod.enum(["BUY", "SELL", "HOLD"]),
+          composite: zod.number(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Conservative agreement check across indicators and required timeframes.",
+    ),
   backtest: zod.object({
     winRate: zod.number(),
     avgReturn: zod.number(),
@@ -475,6 +505,33 @@ export const GetAutoTraderStatusResponse = zod.object({
       confidence: zod.number(),
       price: zod.number(),
       composite: zod.number(),
+      coherence: zod
+        .object({
+          score: zod.number().describe("Combined coherence score from 0 to 1."),
+          indicatorAgreement: zod
+            .number()
+            .describe(
+              "Agreement among trend, momentum, mean reversion, volatility, and volume from 0 to 1.",
+            ),
+          timeframeAgreement: zod
+            .number()
+            .describe(
+              "Share of required timeframes aligned with the proposed direction from 0 to 1.",
+            ),
+          isCoherent: zod.boolean(),
+          reason: zod.string(),
+          direction: zod.enum(["BUY", "SELL", "HOLD"]),
+          timeframes: zod.array(
+            zod.object({
+              timeframe: zod.string(),
+              direction: zod.enum(["BUY", "SELL", "HOLD"]),
+              composite: zod.number(),
+            }),
+          ),
+        })
+        .describe(
+          "Conservative agreement check across indicators and required timeframes.",
+        ),
       timestamp: zod.string(),
     }),
   ),
@@ -510,6 +567,33 @@ export const ControlAutoTraderResponse = zod.object({
       confidence: zod.number(),
       price: zod.number(),
       composite: zod.number(),
+      coherence: zod
+        .object({
+          score: zod.number().describe("Combined coherence score from 0 to 1."),
+          indicatorAgreement: zod
+            .number()
+            .describe(
+              "Agreement among trend, momentum, mean reversion, volatility, and volume from 0 to 1.",
+            ),
+          timeframeAgreement: zod
+            .number()
+            .describe(
+              "Share of required timeframes aligned with the proposed direction from 0 to 1.",
+            ),
+          isCoherent: zod.boolean(),
+          reason: zod.string(),
+          direction: zod.enum(["BUY", "SELL", "HOLD"]),
+          timeframes: zod.array(
+            zod.object({
+              timeframe: zod.string(),
+              direction: zod.enum(["BUY", "SELL", "HOLD"]),
+              composite: zod.number(),
+            }),
+          ),
+        })
+        .describe(
+          "Conservative agreement check across indicators and required timeframes.",
+        ),
       timestamp: zod.string(),
     }),
   ),

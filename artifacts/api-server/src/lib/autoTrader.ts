@@ -6,6 +6,7 @@ import * as dexTrader from "./baseDexTrader";
 import * as binanceWs from "./binanceWs";
 import * as scaling from "./scalingEngine";
 import type { OHLCVRow } from "./binanceWs";
+import { applyCoherence, calculateCoherence, type CoherenceResult, type TimeframeFactorSnapshot } from "./coherence";
 
 // ─── Indicator helpers ────────────────────────────────────────────────────────
 
@@ -109,13 +110,6 @@ function computeFactorScores(f: ReturnType<typeof computeFeatures>) {
   return { trend, momentum, meanReversion, volatility, volume, composite: Math.round(composite * 1000) / 1000 };
 }
 
-function signalFromComposite(composite: number): { signal: "BUY" | "SELL" | "HOLD"; confidence: number } {
-  const confidence = Math.round((composite + 1) / 2 * 1000) / 1000;
-  // Threshold raised to ±0.25 (from ±0.15) to require higher conviction before acting
-  const signal: "BUY" | "SELL" | "HOLD" = composite > 0.25 ? "BUY" : composite < -0.25 ? "SELL" : "HOLD";
-  return { signal, confidence };
-}
-
 // ─── Fetch via REST (used to seed WS buffers) ─────────────────────────────────
 
 const BINANCE_SYMBOL_MAP: Record<string, string> = {
@@ -139,7 +133,23 @@ async function fetchOHLCV(symbol: string, timeframe: string, limit: number): Pro
 async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   const features = computeFeatures(candles);
   const factors = computeFactorScores(features);
-  const { signal, confidence } = signalFromComposite(factors.composite);
+  const timeframeSnapshots: TimeframeFactorSnapshot[] = [{ timeframe: "1m", factors }];
+  try {
+    const [fiveMinuteCandles, fifteenMinuteCandles] = await Promise.all([
+      fetchOHLCV(symbol, "5m", 100),
+      fetchOHLCV(symbol, "15m", 100),
+    ]);
+    if (fiveMinuteCandles.length >= 35) {
+      timeframeSnapshots.push({ timeframe: "5m", factors: computeFactorScores(computeFeatures(fiveMinuteCandles)) });
+    }
+    if (fifteenMinuteCandles.length >= 35) {
+      timeframeSnapshots.push({ timeframe: "15m", factors: computeFactorScores(computeFeatures(fifteenMinuteCandles)) });
+    }
+  } catch (err) {
+    logger.warn({ err, symbol }, "Unable to load coherence timeframes");
+  }
+  const coherence = calculateCoherence(factors, timeframeSnapshots, 0.25);
+  const { signal, confidence } = applyCoherence(factors, coherence, 0.25);
   const price = features.price;
 
   const [insertedSignal] = await db.insert(signalsTable).values({
@@ -207,14 +217,22 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
     logger.error({ err, symbol, signal }, "DEX trade failed");
   }
 
-  const recent: RecentSignal = { symbol, signal, confidence, price, composite: factors.composite, timestamp: new Date().toISOString() };
+  const recent: RecentSignal = {
+    symbol,
+    signal,
+    confidence,
+    price,
+    composite: factors.composite,
+    coherence,
+    timestamp: new Date().toISOString(),
+  };
   state.signalsGenerated++;
   state.totalRuns++;
   state.lastRun = new Date().toISOString();
   state.nextRun = null;
   state.lastSignals = [recent, ...state.lastSignals].slice(0, MAX_RECENT_SIGNALS);
 
-  logger.info({ symbol, signal, confidence, price, composite: factors.composite, source: "websocket" }, "Signal generated");
+  logger.info({ symbol, signal, confidence, price, composite: factors.composite, coherenceScore: coherence.score, source: "websocket" }, "Signal generated");
 }
 
 // ─── Auto-Trader State ────────────────────────────────────────────────────────
@@ -225,6 +243,7 @@ export interface RecentSignal {
   confidence: number;
   price: number;
   composite: number;
+  coherence: CoherenceResult;
   timestamp: string;
 }
 

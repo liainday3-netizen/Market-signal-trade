@@ -5,6 +5,7 @@
  * AI Trader API
  * OpenAPI spec version: 0.1.0
  */
+import type { Coherence } from "./coherence";
 
 export interface RecentSignal {
   symbol: string;
@@ -12,5 +13,6 @@ export interface RecentSignal {
   confidence: number;
   price: number;
   composite: number;
+  coherence: Coherence;
   timestamp: string;
 }

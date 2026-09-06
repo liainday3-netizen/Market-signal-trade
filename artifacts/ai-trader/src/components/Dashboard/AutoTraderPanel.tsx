@@ -52,12 +52,22 @@ function SignalBadge({ signal }: { signal: string }) {
 }
 
 function SignalFeedRow({ sig }: { sig: RecentSignal }) {
+  const coherencePct = Math.round(sig.coherence.score * 100);
   return (
     <div className="flex items-center gap-2 py-1.5 border-b border-border/30 last:border-0">
       <SignalBadge signal={sig.signal} />
       <span className="text-xs font-mono text-foreground font-medium w-16 shrink-0">{sig.symbol.replace("/USDT", "")}</span>
       <span className={cn("text-xs font-mono font-bold w-10", sig.composite >= 0 ? "text-buy" : "text-sell")}>
         {sig.composite > 0 ? "+" : ""}{sig.composite.toFixed(2)}
+      </span>
+      <span
+        className={cn(
+          "text-[10px] font-mono font-bold w-9",
+          sig.coherence.isCoherent ? "text-buy" : "text-hold",
+        )}
+        title={sig.coherence.reason}
+      >
+        C{coherencePct}%
       </span>
       <span className="text-xs font-mono text-muted-foreground">${sig.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
       <span className="ml-auto text-[10px] font-mono text-muted-foreground/50 shrink-0">

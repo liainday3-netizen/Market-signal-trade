@@ -475,6 +475,8 @@ components:
           type: number
         composite:
           type: number
+        coherence:
+          $ref: "#/components/schemas/Coherence"
         timestamp:
           type: string
       required:
@@ -483,7 +485,44 @@ components:
         - confidence
         - price
         - composite
+        - coherence
         - timestamp
+    Coherence:
+      type: object
+      description: Conservative agreement check across indicators and required timeframes.
+      properties:
+        score:
+          type: number
+          description: Combined coherence score from 0 to 1.
+        indicatorAgreement:
+          type: number
+          description: Agreement among trend, momentum, mean reversion, volatility, and volume from 0 to 1.
+        timeframeAgreement:
+          type: number
+          description: Share of required timeframes aligned with the proposed direction from 0 to 1.
+        isCoherent:
+          type: boolean
+        reason:
+          type: string
+        direction:
+          type: string
+          enum: [BUY, SELL, HOLD]
+        timeframes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeframeCoherence"
+      required: [score, indicatorAgreement, timeframeAgreement, isCoherent, reason, direction, timeframes]
+    TimeframeCoherence:
+      type: object
+      properties:
+        timeframe:
+          type: string
+        direction:
+          type: string
+          enum: [BUY, SELL, HOLD]
+        composite:
+          type: number
+      required: [timeframe, direction, composite]
     SignalResponse:
       type: object
       properties:
@@ -504,6 +543,8 @@ components:
           $ref: "#/components/schemas/Features"
         factorScores:
           $ref: "#/components/schemas/FactorScores"
+        coherence:
+          $ref: "#/components/schemas/Coherence"
         backtest:
           $ref: "#/components/schemas/BacktestStats"
       required:
@@ -515,6 +556,7 @@ components:
         - timestamp
         - features
         - factorScores
+         - coherence
         - backtest
     Features:
       type: object

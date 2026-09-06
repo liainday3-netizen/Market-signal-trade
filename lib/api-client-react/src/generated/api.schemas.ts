@@ -65,12 +65,53 @@ export const AutoTraderStatusDataSource = {
   rest: "rest",
 } as const;
 
+export type CoherenceDirection =
+  (typeof CoherenceDirection)[keyof typeof CoherenceDirection];
+
+export const CoherenceDirection = {
+  BUY: "BUY",
+  SELL: "SELL",
+  HOLD: "HOLD",
+} as const;
+
+export type TimeframeCoherenceDirection =
+  (typeof TimeframeCoherenceDirection)[keyof typeof TimeframeCoherenceDirection];
+
+export const TimeframeCoherenceDirection = {
+  BUY: "BUY",
+  SELL: "SELL",
+  HOLD: "HOLD",
+} as const;
+
+export interface TimeframeCoherence {
+  timeframe: string;
+  direction: TimeframeCoherenceDirection;
+  composite: number;
+}
+
+/**
+ * Conservative agreement check across indicators and required timeframes.
+ */
+export interface Coherence {
+  /** Combined coherence score from 0 to 1. */
+  score: number;
+  /** Agreement among trend, momentum, mean reversion, volatility, and volume from 0 to 1. */
+  indicatorAgreement: number;
+  /** Share of required timeframes aligned with the proposed direction from 0 to 1. */
+  timeframeAgreement: number;
+  isCoherent: boolean;
+  reason: string;
+  direction: CoherenceDirection;
+  timeframes: TimeframeCoherence[];
+}
+
 export interface RecentSignal {
   symbol: string;
   signal: string;
   confidence: number;
   price: number;
   composite: number;
+  coherence: Coherence;
   timestamp: string;
 }
 
@@ -156,7 +197,8 @@ export interface SignalResponse {
   timeframe: string;
   timestamp: string;
   features: Features;
-  factorScores: FactorScores;
+  factorScores?: FactorScores;
+  coherence?: Coherence;
   backtest: BacktestStats;
 }
 

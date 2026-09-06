@@ -1,6 +1,6 @@
 import { SignalResponse } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Minus, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Activity, ShieldCheck, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +41,10 @@ export function SignalWidget({ data, isLoading, livePrice, livePriceConnected }:
   const confidencePct = Math.round(confidence * 100);
   const composite = data.factorScores?.composite ?? 0;
   const compositeBar = ((composite + 1) / 2) * 100;
+  const coherence = data.coherence;
+  const coherencePct = coherence ? Math.round(coherence.score * 100) : null;
+  const indicatorPct = coherence ? Math.round(coherence.indicatorAgreement * 100) : null;
+  const timeframePct = coherence ? Math.round(coherence.timeframeAgreement * 100) : null;
 
   return (
     <Card className={cn("relative overflow-hidden h-full flex flex-col border", config.border)}>
@@ -71,6 +75,43 @@ export function SignalWidget({ data, isLoading, livePrice, livePriceConnected }:
             </p>
           </div>
         </div>
+
+        {/* Coherence gate */}
+        {coherence && (
+          <div className={cn(
+            "rounded-md border px-3 py-2.5 space-y-2",
+            coherence.isCoherent ? "border-buy/25 bg-buy/5" : "border-hold/25 bg-hold/5",
+          )}>
+            <div className="flex items-center gap-2">
+              {coherence.isCoherent
+                ? <ShieldCheck className="w-3.5 h-3.5 text-buy" />
+                : <AlertTriangle className="w-3.5 h-3.5 text-hold" />
+              }
+              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Coherence
+              </span>
+              <span className={cn(
+                "ml-auto text-sm font-mono font-bold tabular-nums",
+                coherence.isCoherent ? "text-buy" : "text-hold",
+              )}>
+                {coherencePct}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Indicators</span>
+                <span className="text-foreground">{indicatorPct}%</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Timeframes</span>
+                <span className="text-foreground">{timeframePct}%</span>
+              </div>
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground" title={coherence.reason}>
+              {coherence.reason}
+            </p>
+          </div>
+        )}
 
         {/* Composite score bar */}
         <div>
