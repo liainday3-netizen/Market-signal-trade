@@ -31,4 +31,9 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+
+[userenv.development]
 COINBASE_API_SECRET = ""
+
+[userenv.production]
+COINBASE_API_SECRET = "Mn9NsUlxrRqXkZTJ0dicDvbihAjUfUTlmGDxcybWegBhGw "
