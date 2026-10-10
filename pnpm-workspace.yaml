@@ -42,6 +42,7 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  '@babel/core': ^7.29.7
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
@@ -63,19 +64,11 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
-  '@babel/core': ^7.29.7
-  brace-expansion: ^2.1.2
+  baseline-browser-mapping@>=2.0.0 <2.11.0: '>=2.11.0'
+  body-parser@>=2.0.0 <2.3.0: '>=2.3.0'
+  brace-expansion: ^2.1.7
+  browserslist@<=4.28.6: '>=4.28.7'
   esbuild: 0.28.1
-  fast-uri: ^4.1.0
-  js-yaml: ^4.3.0
-  lodash: ^4.18.1
-  markdown-it: ^14.3.0
-  path-to-regexp: ^8.4.2
-  picomatch: ^4.0.5
-  postcss: ^8.5.19
-  qs: ^6.15.3
-  ws: ^8.21.1
-  yaml: ^2.9.0
   esbuild>@esbuild/aix-ppc64: '-'
   esbuild>@esbuild/android-arm: '-'
   esbuild>@esbuild/android-arm64: '-'
@@ -101,6 +94,9 @@ overrides:
   esbuild>@esbuild/win32-arm64: '-'
   esbuild>@esbuild/win32-ia32: '-'
   esbuild>@esbuild/win32-x64: '-'
+  fast-copy@>=4.0.0 <4.1.0: '>=4.1.0'
+  fast-uri: ^4.1.5
+  js-yaml: ^4.3.2
   lightningcss>lightningcss-android-arm64: '-'
   lightningcss>lightningcss-darwin-arm64: '-'
   lightningcss>lightningcss-darwin-x64: '-'
@@ -111,6 +107,17 @@ overrides:
   lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
   lightningcss>lightningcss-win32-x64-msvc: '-'
+  lodash: ^4.18.1
+  markdown-it: ^14.3.1
+  nanoid@<3.3.18: '>=3.3.18'
+  path-to-regexp: ^8.4.2
+  picomatch: ^4.0.5
+  postcss: ^8.5.23
+  postcss-selector-parser@<7.1.6: '>=7.1.6'
+  proxy-addr@>=1.1.0 <2.0.8: '>=2.0.8'
+  qs: ^6.15.3
+  qs@>=2.2.5 <6.16.0: '>=6.16.0'
+  qs@>=6.14.2 <=6.15.3: '>=6.16.0'
   rollup>@rollup/rollup-android-arm-eabi: '-'
   rollup>@rollup/rollup-android-arm64: '-'
   rollup>@rollup/rollup-darwin-arm64: '-'
@@ -135,3 +142,6 @@ overrides:
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
+  source-map-js@>=1.0.0 <1.2.2: '>=1.2.2'
+  ws: ^8.21.1
+  yaml: ^2.9.0
