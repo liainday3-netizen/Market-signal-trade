@@ -107,3 +107,15 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+## 24/7 operation & safety (added on branch feat/24-7-hardening)
+
+- **Risk manager** (`artifacts/api-server/src/lib/riskManager.ts`): the only gate before real-money entries (Coinbase + Base DEX). Kill switch, daily max loss (realized + unrealized), per-trade cap, max positions, max exposure, consecutive-failure circuit breaker. Exits are never blocked.
+- **Live arm**: `LIVE_TRADING_ENABLED=true` must be set or no real position is opened. Default = paper only.
+- **Auth**: every non-GET `/api/trader/*` route, plus exchange/balance/risk reads, requires `Authorization: Bearer $ADMIN_TOKEN`. Production without `ADMIN_TOKEN` fails closed (503).
+- **Per-symbol locks** (`keyedMutex.ts`) serialise orders, so SL/TP and signal sells can't double-sell.
+- **Alerts** (`alerts.ts`): Telegram / Discord via env.
+- **Health**: `/api/healthz/deep` returns 503 when the loop is stale; a watchdog forces a WS reconnect.
+- **DEX positions persist** in `settings` (`dex.positions`) so restarts don't orphan tokens.
+- Tests: `pnpm --filter @workspace/api-server test`.
+- Deployment: see `DEPLOY.md`. Must be a single always-on instance (Reserved VM / VPS), not Autoscale.

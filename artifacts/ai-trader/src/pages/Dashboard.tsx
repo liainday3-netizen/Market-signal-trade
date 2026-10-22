@@ -16,6 +16,7 @@ import { PortfolioPanel } from "@/components/Dashboard/PortfolioPanel";
 import { LiveTradingPanel } from "@/components/Dashboard/LiveTradingPanel";
 import { DexTradingPanel } from "@/components/Dashboard/DexTradingPanel";
 import { ScalingPanel } from "@/components/Dashboard/ScalingPanel";
+import { RiskPanel } from "@/components/Dashboard/RiskPanel";
 import { PriceChart } from "@/components/Dashboard/PriceChart";
 import { SignalHistory } from "@/components/Dashboard/SignalHistory";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,8 @@ export default function Dashboard() {
 
       {/* Main */}
       <main className="flex-1 max-w-[1400px] mx-auto w-full px-4 py-4 flex flex-col gap-4">
+        {/* Mobile: risk controls / kill switch first, within thumb reach */}
+        <div className="lg:hidden"><RiskPanel /></div>
 
         {/* Row 1: Signal + Auto-Loop + Factor Scores + Backtest */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[260px]">
@@ -164,7 +167,8 @@ export default function Dashboard() {
           <div className="lg:col-span-1">
             <DexTradingPanel />
           </div>
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-4">
+            <div className="hidden lg:block"><RiskPanel /></div>
             <ScalingPanel />
           </div>
         </div>

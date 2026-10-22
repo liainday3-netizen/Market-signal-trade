@@ -3,6 +3,9 @@ import { eq, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import * as exchange from "./coinbaseExchange";
 import * as scaling from "./scalingEngine";
+import * as risk from "./riskManager";
+import { withLock } from "./keyedMutex";
+import { sendAlert } from "./alerts";
 
 const MIN_TRADE_USDC  = 5;
 const PER_TRADE_FRACTION = 0.33;
@@ -28,6 +31,9 @@ const state: LiveTraderState = {
   budgetUsdc: 15,
   positions:  {},
 };
+
+// Expose open live positions to the risk manager (exposure / daily PnL).
+risk.registerVenue("coinbase", () => Object.values(state.positions));
 
 // Per-symbol trailing high-water mark and cooldown tracking
 const _hwLive    = new Map<string, number>();
@@ -118,6 +124,10 @@ export function refreshConfigured(): void {
 // ─── Trade execution ──────────────────────────────────────────────────────────
 export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   if (!state.enabled || !state.configured) return false;
+  return withLock(`coinbase:${symbol}`, () => executeBuyLocked(symbol, price, signalId, composite));
+}
+
+async function executeBuyLocked(symbol: string, price: number, signalId: number | undefined, composite: number): Promise<boolean> {
 
   // Re-entry cooldown: prevent whipsaw buys immediately after a stop-loss
   const lastSell = _cooldowns.get(symbol);
@@ -144,7 +154,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     logger.info({ symbol, composite }, "Live: scale-in skipped — signal not stronger than entry");
     return false;
   }
-  const allocation = scalingIn
+  let allocation = scalingIn
     ? Math.min(state.budgetUsdc, freeUsdc * PER_TRADE_FRACTION * multiplier * 0.5)
     : Math.min(
         Math.max(MIN_TRADE_USDC, freeUsdc * PER_TRADE_FRACTION) * multiplier,
@@ -156,10 +166,21 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     return false;
   }
 
+  // ── Risk gate: kill switch, daily loss, exposure, per-trade cap ───────────
+  const decision = await risk.checkEntry({ venue: "coinbase", symbol, usd: allocation });
+  if (!decision.allowed) return false;
+  allocation = decision.usd;
+  if (allocation < MIN_TRADE_USDC) {
+    logger.info({ symbol, allocation }, "Live: risk-capped size below exchange minimum — skipped");
+    return false;
+  }
+
   try {
     const order     = await exchange.placeMarketBuy(symbol, allocation);
+    risk.recordOrderSuccess();
     const fillPrice = order.price  > 0 ? order.price  : price;
     const qty       = order.filled > 0 ? order.filled : allocation / fillPrice;
+    sendAlert("info", `LIVE ${scalingIn ? "SCALE-IN" : "BUY"} ${symbol}: $${allocation.toFixed(2)} @ ${fillPrice.toFixed(2)} (order ${order.id})`, `livebuy:${order.id}`);
 
     if (existing) {
       const totalQty = existing.quantity + qty;
@@ -196,17 +217,25 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     return true;
   } catch (err) {
     logger.error({ err, symbol }, "Live BUY failed");
+    await risk.recordOrderFailure("coinbase", symbol, err);
     return false;
   }
 }
 
 export async function executeSell(symbol: string, price: number, signalId?: number): Promise<boolean> {
-  if (!state.enabled || !state.configured) return false;
+  // Exits are never blocked by the risk layer. They only need configured keys,
+  // so stops keep protecting open positions even if live entries are disabled.
+  if (!state.configured) return false;
+  return withLock(`coinbase:${symbol}`, () => executeSellLocked(symbol, price, signalId));
+}
+
+async function executeSellLocked(symbol: string, price: number, signalId?: number): Promise<boolean> {
   const position = state.positions[symbol];
   if (!position) { logger.info({ symbol }, "Live: no open position to sell"); return false; }
 
   try {
     const order     = await exchange.placeMarketSell(symbol, position.quantity);
+    risk.recordOrderSuccess();
     const fillPrice = order.price  > 0 ? order.price  : price;
     const proceeds  = position.quantity * fillPrice;
     const cost      = position.quantity * position.avgEntryPrice;
@@ -237,9 +266,12 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
     });
 
     logger.info({ symbol, qty: position.quantity, fillPrice, realizedPnl, orderId: order.id }, "Live SELL executed");
+    sendAlert("info", `LIVE SELL ${symbol}: ${position.quantity} @ ${fillPrice.toFixed(2)} | PnL ${realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)} USD (order ${order.id})`, `livesell:${order.id}`);
     return true;
   } catch (err) {
     logger.error({ err, symbol }, "Live SELL failed");
+    await risk.recordOrderFailure("coinbase", symbol, err);
+    sendAlert("critical", `LIVE SELL FAILED ${symbol} — position still open, check Coinbase manually`, `livesellfail:${symbol}`);
     return false;
   }
 }
@@ -261,10 +293,17 @@ export function checkSlTp(symbol: string, currentPrice: number): void {
   const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
   if (scaling.isStopLoss(stopRef, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, hw, current: currentPrice }, "Live trailing stop-loss triggered");
-    executeSell(symbol, currentPrice).catch(() => {});
+    executeSell(symbol, currentPrice).catch((err) => logger.error({ err, symbol }, "Live stop-loss sell error"));
   } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "Live take-profit triggered");
-    executeSell(symbol, currentPrice).catch(() => {});
+    executeSell(symbol, currentPrice).catch((err) => logger.error({ err, symbol }, "Live take-profit sell error"));
+  }
+}
+
+/** Close every open live position (kill switch "flatten"). */
+export async function flattenAll(getPrice: (symbol: string) => number | undefined): Promise<void> {
+  for (const symbol of Object.keys(state.positions)) {
+    await executeSell(symbol, getPrice(symbol) ?? state.positions[symbol]?.avgEntryPrice ?? 0);
   }
 }
 

@@ -116,26 +116,51 @@ export async function fetchUsdcBalance(): Promise<number> {
   );
 }
 
-export async function placeMarketBuy(symbol: string, usdcAmount: number): Promise<ExchangeOrder> {
+/**
+ * Market BUY spending `usdAmount` of quote currency.
+ * Coinbase Advanced requires market buys to be expressed as a cost (quote
+ * amount); passing a base quantity without a price throws InvalidOrder in ccxt.
+ */
+export async function placeMarketBuy(symbol: string, usdAmount: number): Promise<ExchangeOrder> {
   const ex = getExchange();
   const cbSymbol = toExchangeSymbol(symbol); // e.g. BTC/USDT → BTC/USD
-  const ticker = await ex.fetchTicker(cbSymbol);
-  const price = ticker.last ?? ticker.bid ?? 0;
-  if (!price) throw new Error(`Cannot determine price for ${cbSymbol}`);
-
-  const quantity = usdcAmount / price;
-
-  logger.info({ symbol, cbSymbol, usdcAmount, quantity, price }, "Placing real market BUY");
-  const order = await ex.createMarketBuyOrder(cbSymbol, quantity);
-  return normaliseOrder(order);
+  logger.info({ symbol, cbSymbol, usdAmount }, "Placing real market BUY (by cost)");
+  const order = await ex.createMarketBuyOrderWithCost(cbSymbol, usdAmount);
+  return resolveFill(cbSymbol, normaliseOrder(order));
 }
 
 export async function placeMarketSell(symbol: string, quantity: number): Promise<ExchangeOrder> {
   const ex = getExchange();
   const cbSymbol = toExchangeSymbol(symbol); // e.g. BTC/USDT → BTC/USD
-  logger.info({ symbol, cbSymbol, quantity }, "Placing real market SELL");
-  const order = await ex.createMarketSellOrder(cbSymbol, quantity);
-  return normaliseOrder(order);
+  await ex.loadMarkets();
+  const amount = Number(ex.amountToPrecision(cbSymbol, quantity));
+  if (!(amount > 0)) throw new Error(`Sell amount ${quantity} rounds to zero for ${cbSymbol}`);
+  logger.info({ symbol, cbSymbol, quantity: amount }, "Placing real market SELL");
+  const order = await ex.createMarketSellOrder(cbSymbol, amount);
+  return resolveFill(cbSymbol, normaliseOrder(order));
+}
+
+/**
+ * Market orders are often acknowledged before they fill. Poll the order a few
+ * times so we record the real filled quantity and average price.
+ */
+async function resolveFill(cbSymbol: string, order: ExchangeOrder): Promise<ExchangeOrder> {
+  if (!order.id || (order.filled > 0 && order.price > 0 && order.status === "closed")) return order;
+  const ex = getExchange();
+  let latest = order;
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    try {
+      latest = normaliseOrder(await ex.fetchOrder(order.id, cbSymbol));
+      if (latest.status === "closed" || latest.status === "canceled" || latest.status === "rejected") break;
+    } catch (err) {
+      logger.warn({ err, orderId: order.id }, "Coinbase: fetchOrder failed while resolving fill");
+    }
+  }
+  if (latest.status === "canceled" || latest.status === "rejected") {
+    throw new Error(`Order ${order.id} ${latest.status} by exchange`);
+  }
+  return latest;
 }
 
 export async function fetchOpenOrders(symbol?: string): Promise<ExchangeOrder[]> {
