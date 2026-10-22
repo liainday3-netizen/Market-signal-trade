@@ -9,7 +9,11 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { db, tradesTable } from "@workspace/db";
+import { db, tradesTable, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import * as risk from "./riskManager";
+import { withLock } from "./keyedMutex";
+import { sendAlert } from "./alerts";
 import * as scaling from "./scalingEngine";
 import { logger } from "./logger";
 
@@ -107,6 +111,29 @@ const _state: DexTraderState = {
 };
 
 const MAX_PER_TRADE_USDC = 5;
+
+// Expose open DEX positions to the risk manager.
+risk.registerVenue("base-dex", () => Object.values(_state.positions));
+
+// ─── Persistence (positions + enabled flag survive restarts) ──────────────────
+async function persistPositions(): Promise<void> {
+  const value = JSON.stringify(_state.positions);
+  await db.insert(settingsTable).values({ key: "dex.positions", value })
+    .onConflictDoUpdate({ target: settingsTable.key, set: { value } })
+    .catch((err: unknown) => logger.error({ err }, "DEX: failed to persist positions"));
+}
+
+export async function loadPersistedState(): Promise<void> {
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, "dex.positions")).limit(1);
+    if (rows.length) _state.positions = JSON.parse(rows[0].value) as Record<string, DexPosition>;
+    const en = await db.select().from(settingsTable).where(eq(settingsTable.key, "dex.enabled")).limit(1);
+    if (en.length && en[0].value === "true" && _state.configured) _state.enabled = true;
+    logger.info({ enabled: _state.enabled, openPositions: Object.keys(_state.positions) }, "DEX state restored from DB");
+  } catch (err) {
+    logger.error({ err }, "DEX: failed to restore persisted state");
+  }
+}
 const SLIPPAGE = 0.01;
 
 // ─── Client helpers ────────────────────────────────────────────────────────────
@@ -248,8 +275,9 @@ async function swap(
   }) as `0x${string}`;
 
   logger.info({ hash, tokenIn, tokenOut }, "Swap tx submitted");
-  const receipt = await (c.pub as any).waitForTransactionReceipt({ hash });
+  const receipt = await (c.pub as any).waitForTransactionReceipt({ hash, timeout: 120_000 });
   logger.info({ hash, status: receipt.status }, "Swap confirmed");
+  if (receipt.status !== "success") throw new Error(`Swap ${hash} reverted on-chain`);
   return hash;
 }
 
@@ -320,6 +348,10 @@ async function autoRefillUsdc(): Promise<void> {
 export async function executeBuy(symbol: string, price: number, signalId?: number, composite = 0.5): Promise<boolean> {
   if (!_state.enabled || !_state.configured) return false;
   if (!SYMBOL_MAP[symbol]) return false; // SOL not on Base
+  return withLock(`dex:${symbol}`, () => executeBuyLocked(symbol, price, signalId, composite));
+}
+
+async function executeBuyLocked(symbol: string, price: number, signalId: number | undefined, composite: number): Promise<boolean> {
 
   const existing = _state.positions[symbol];
   const track = _scaleIns.get(symbol);
@@ -340,7 +372,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     address: TOKENS.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [c.account.address],
   }) as bigint;
   const usdcBalance = parseFloat(formatUnits(usdcRaw, TOKEN_DECIMALS.USDC));
-  const spendUsdc = scalingIn
+  let spendUsdc = scalingIn
     ? Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier * 0.5
     : Math.min(MAX_PER_TRADE_USDC, usdcBalance * 0.33) * multiplier;
 
@@ -348,6 +380,12 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
     logger.warn({ symbol, usdcBalance }, "DEX: insufficient USDC to BUY");
     return false;
   }
+
+  // ── Risk gate ─────────────────────────────────────────────────────────────
+  const decision = await risk.checkEntry({ venue: "base-dex", symbol, usd: spendUsdc });
+  if (!decision.allowed) return false;
+  spendUsdc = decision.usd;
+  if (spendUsdc < 1) return false;
 
   const { token, key, fee } = SYMBOL_MAP[symbol]!;
   const decimals = TOKEN_DECIMALS[key];
@@ -357,7 +395,9 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
 
   try {
     const hash = await swap(TOKENS.USDC, token, fee, amountIn, amountOutMin);
+    risk.recordOrderSuccess();
     _state.totalTrades++;
+    sendAlert("info", `DEX ${existing ? "SCALE-IN" : "BUY"} ${symbol}: $${spendUsdc.toFixed(2)} @ ~${price.toFixed(2)} (tx ${hash})`, `dexbuy:${hash}`);
     if (existing) {
       const totalQty = existing.quantity + expectedOut;
       const avgPrice = ((existing.quantity * existing.avgEntryPrice) + (expectedOut * price)) / totalQty;
@@ -372,6 +412,7 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
         realizedPnl: null, signalId: signalId ?? null,
         txHash: hash,
       });
+      await persistPositions();
       logger.info({ symbol, expectedOut, spendUsdc, price, hash }, "DEX SCALE-IN executed");
       return true;
     }
@@ -391,18 +432,25 @@ export async function executeBuy(symbol: string, price: number, signalId?: numbe
       txHash: hash,
     });
 
+    await persistPositions();
     logger.info({ symbol, spendUsdc, price, hash }, "DEX BUY executed");
     return true;
   } catch (err) {
     logger.error({ err, symbol }, "DEX BUY failed");
+    await risk.recordOrderFailure("base-dex", symbol, err);
     return false;
   }
 }
 
 // ─── SELL ─────────────────────────────────────────────────────────────────────
 export async function executeSell(symbol: string, price: number, signalId?: number): Promise<boolean> {
-  if (!_state.enabled || !_state.configured) return false;
+  // Exits are never blocked by the risk layer or the enabled flag.
+  if (!_state.configured) return false;
   if (!SYMBOL_MAP[symbol]) return false;
+  return withLock(`dex:${symbol}`, () => executeSellLocked(symbol, price, signalId));
+}
+
+async function executeSellLocked(symbol: string, price: number, signalId?: number): Promise<boolean> {
 
   const position = _state.positions[symbol];
   if (!position) {
@@ -424,6 +472,8 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
    if (walletTokenBalance < 1e-8) {
     logger.warn({ symbol }, "DEX: on-chain token balance is zero, clearing position");
     delete _state.positions[symbol];
+    await persistPositions();
+    sendAlert("warn", `DEX ${symbol}: tracked position had zero on-chain balance — cleared`, `dexzero:${symbol}`);
     return false;
   }
 
@@ -436,6 +486,7 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
 
   try {
     const hash = await swap(token, TOKENS.USDC, fee, tokenRaw, amountOutMin);
+    risk.recordOrderSuccess();
     const cost         = position.quantity * position.avgEntryPrice;
     const realizedPnl  = expectedUsdc - cost;
 
@@ -458,10 +509,14 @@ export async function executeSell(symbol: string, price: number, signalId?: numb
       txHash: hash,
     });
 
-     logger.info({ symbol, trackedQuantity, price, realizedPnl, hash }, "DEX SELL executed");
+    await persistPositions();
+    logger.info({ symbol, trackedQuantity, price, realizedPnl, hash }, "DEX SELL executed");
+    sendAlert("info", `DEX SELL ${symbol}: ${trackedQuantity} @ ~${price.toFixed(2)} | PnL ${realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)} USD (tx ${hash})`, `dexsell:${hash}`);
     return true;
   } catch (err) {
     logger.error({ err, symbol }, "DEX SELL failed");
+    await risk.recordOrderFailure("base-dex", symbol, err);
+    sendAlert("critical", `DEX SELL FAILED ${symbol} — position still open, check wallet manually`, `dexsellfail:${symbol}`);
     return false;
   }
 }
@@ -481,10 +536,20 @@ export function checkSlTp(symbol: string, currentPrice: number): void {
   const stopRef = scaling.highWaterPrice(position.avgEntryPrice, hw);
   if (scaling.isStopLoss(stopRef, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, hw, current: currentPrice }, "DEX trailing stop-loss triggered");
-    executeSell(symbol, currentPrice).catch(() => {});
+    executeSell(symbol, currentPrice).catch((err) => logger.error({ err, symbol }, "DEX stop-loss sell error"));
   } else if (scaling.isTakeProfit(position.avgEntryPrice, currentPrice)) {
     logger.info({ symbol, entry: position.avgEntryPrice, current: currentPrice }, "DEX take-profit triggered");
-    executeSell(symbol, currentPrice).catch(() => {});
+    executeSell(symbol, currentPrice).catch((err) => logger.error({ err, symbol }, "DEX take-profit sell error"));
+  }
+}
+
+/** Close every open DEX position (kill switch "flatten"). */
+export async function flattenAll(getPrice: (symbol: string) => number | undefined): Promise<void> {
+  for (const symbol of Object.keys(_state.positions)) {
+    // Use the latest market price for the slippage floor — entry price could
+    // make the swap revert after a drop.
+    const px = getPrice(symbol) ?? _state.positions[symbol]?.avgEntryPrice ?? 0;
+    await executeSell(symbol, px);
   }
 }
 
