@@ -6,6 +6,8 @@ import * as dexTrader from "./baseDexTrader";
 import * as binanceWs from "./binanceWs";
 import * as scaling from "./scalingEngine";
 import type { OHLCVRow } from "./binanceWs";
+import * as risk from "./riskManager";
+import { sendAlert } from "./alerts";
 import { applyCoherence, calculateCoherence, type CoherenceResult, type TimeframeFactorSnapshot } from "./coherence";
 
 // ─── Indicator helpers ────────────────────────────────────────────────────────
@@ -182,14 +184,19 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
     logger.error({ err, symbol }, "SL/TP check failed");
   }
   // Live SL/TP
-  try { liveTrader.checkSlTp(symbol, price); } catch (_) { /* noop */ }
+  try { liveTrader.checkSlTp(symbol, price); } catch (err) { logger.error({ err, symbol }, "Live SL/TP check failed"); }
   // DEX SL/TP — track whether it fired so signal-SELL doesn't double-execute
   try {
     const dexPosBefore = dexTrader.getState().positions[symbol];
     dexTrader.checkSlTp(symbol, price);
     const dexPosAfter = dexTrader.getState().positions[symbol];
     if (dexPosBefore && !dexPosAfter) dexSlTpFired = true;
-  } catch (_) { /* noop */ }
+    // Note: checkSlTp sells asynchronously; the per-symbol lock in the DEX
+    // trader guarantees a following signal-SELL sees the closed position.
+  } catch (err) { logger.error({ err, symbol }, "DEX SL/TP check failed"); }
+
+  // Daily-loss breaker runs on every tick, not only when a new BUY appears.
+  try { await risk.evaluateOnTick(); } catch (err) { logger.error({ err }, "Risk tick evaluation failed"); }
 
   // ── Paper trades ──────────────────────────────────────────────────────────
   // Skip signal-based SELL if SL/TP already closed the position this tick
@@ -229,6 +236,7 @@ async function processSymbol(symbol: string, candles: OHLCVRow[]) {
   state.signalsGenerated++;
   state.totalRuns++;
   state.lastRun = new Date().toISOString();
+  _lastProcessedAt = Date.now();
   state.nextRun = null;
   state.lastSignals = [recent, ...state.lastSignals].slice(0, MAX_RECENT_SIGNALS);
 
@@ -277,6 +285,36 @@ let state: AutoTraderState = {
   dataSource: "websocket",
 };
 
+// Watchdog: last time a symbol was fully processed (signal + trades).
+let _lastProcessedAt = 0;
+let _watchdogTimer: ReturnType<typeof setInterval> | null = null;
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+export function getHeartbeat() {
+  const ageMs = _lastProcessedAt ? Date.now() - _lastProcessedAt : null;
+  return {
+    running: state.isRunning,
+    lastProcessedAt: _lastProcessedAt ? new Date(_lastProcessedAt).toISOString() : null,
+    ageSeconds: ageMs === null ? null : Math.round(ageMs / 1000),
+    stale: state.isRunning && (ageMs === null ? false : ageMs > STALE_AFTER_MS),
+    wsStatus: state.wsStatus,
+  };
+}
+
+function watchdog() {
+  if (!state.isRunning || !_lastProcessedAt) return;
+  const age = Date.now() - _lastProcessedAt;
+  if (age > STALE_AFTER_MS) {
+    sendAlert("critical", `No market data processed for ${Math.round(age / 60000)} min — forcing WebSocket reconnect`, "stale-loop");
+    try {
+      binanceWs.disconnect();
+      binanceWs.connect(state.activeSymbols, fetchOHLCV);
+    } catch (err) {
+      logger.error({ err }, "Watchdog reconnect failed");
+    }
+  }
+}
+
 // Fallback REST timer (fires if no WS signal for 2x interval)
 let _fallbackTimer: ReturnType<typeof setInterval> | null = null;
 let _lastSignalAt = 0;
@@ -316,6 +354,7 @@ export function start(intervalSeconds?: number) {
   state.isRunning = true;
   state.dataSource = "websocket";
   _lastSignalAt = Date.now();
+  _lastProcessedAt = Date.now();
 
   // Auto-enable scaling engine when loop starts
   scaling.setConfig({ enabled: true });
@@ -334,6 +373,9 @@ export function start(intervalSeconds?: number) {
   if (_fallbackTimer) clearInterval(_fallbackTimer);
   _fallbackTimer = setInterval(runRestFallback, state.intervalSeconds * 1000);
 
+  if (_watchdogTimer) clearInterval(_watchdogTimer);
+  _watchdogTimer = setInterval(watchdog, 60_000);
+
   logger.info({ symbols: state.activeSymbols, intervalSeconds: state.intervalSeconds }, "Auto-trader started (WS mode)");
 }
 
@@ -343,6 +385,7 @@ export function stop() {
   binanceWs.wsEvents.off("statusChange", onStatusChange);
   binanceWs.disconnect();
   if (_fallbackTimer) { clearInterval(_fallbackTimer); _fallbackTimer = null; }
+  if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
   state.wsStatus = "DISCONNECTED";
   state.nextRun = null;
   logger.info("Auto-trader stopped");
