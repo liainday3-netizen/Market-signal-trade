@@ -2,3 +2,4 @@
 - [Real-trade scaling safety](real-trade-scaling-safety.md) — live and DEX scale-ins stay disabled by default and require stronger signals plus capped additions.
 - [Execution proof](execution-proof.md) — every future Coinbase/DEX real trade must retain an order ID or on-chain transaction hash; paper records are separate.
 - [Signal coherence gate](signal-coherence-gate.md) — BUY/SELL requires indicator and 1m/5m/15m agreement; missing timeframe data fails closed to HOLD.
+- [Risk manager gate](risk-manager.md) — all real entries go through riskManager.checkEntry; LIVE_TRADING_ENABLED required; exits never blocked.

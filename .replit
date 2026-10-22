@@ -8,7 +8,7 @@ id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
-deploymentTarget = "autoscale"
+deploymentTarget = "autoscale"  # ⚠ switch to Reserved VM in the Replit Deploy UI for 24/7 — see DEPLOY.md
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
@@ -32,8 +32,6 @@ channel = "stable-25_05"
 
 [userenv.shared]
 
-[userenv.development]
-COINBASE_API_SECRET = ""
-
-[userenv.production]
-COINBASE_API_SECRET = "Mn9NsUlxrRqXkZTJ0dicDvbihAjUfUTlmGDxcybWegBhGw "
+# Secrets (COINBASE_API_KEY, COINBASE_API_SECRET, DEX_WALLET_PRIVATE_KEY,
+# ADMIN_TOKEN, TELEGRAM_*, ...) belong in Replit's Secrets tool — never in this
+# file, which is committed to git. See .env.example and DEPLOY.md.
